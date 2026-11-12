@@ -1,0 +1,2279 @@
+
+# Build the World's Best Native Android Photo Comparison Studio
+
+## Master Product Vision, Research, UX/UI, Computer Vision, Architecture & Implementation Brief
+
+**Project Type:** Native Android Application  
+**Primary Language:** Kotlin  
+**UI Framework:** Jetpack Compose  
+**Design System:** Material Design 3 (Material 3 Expressive principles where appropriate)  
+**Research Baseline:** November 13, 2026  
+**Product Horizon:** 2027–2030 and beyond  
+**Primary Focus:** Visual comparison, image intelligence, professional analysis, performance, configurability, and exceptional user experience.
+
+---
+
+# 0. YOUR MISSION
+
+You are not being asked to create another ordinary Android application that displays two photographs next to each other.
+
+You are being asked to research, architect, design, and implement a complete, extensible, intelligent, highly configurable visual comparison studio.
+
+The fundamental concept is simple:
+
+**Help people understand, inspect, compare, evaluate, organize, and make decisions about images.**
+
+However, the ways people need to accomplish this are almost unlimited.
+
+Someone might want to:
+
+- Choose the sharpest photograph from a burst of 30 images.
+- Compare an original photograph against its edited version.
+- Compare photographs captured by two different phones or cameras.
+- Understand how different camera applications process the same scene.
+- Identify whether an image was compressed, resized, recolored, cropped, or manipulated.
+- Compare the same location photographed months or years apart.
+- Examine tiny differences between two images at individual-pixel level.
+- Compare photographs with different rotations, perspectives, aspect ratios, or viewpoints.
+- Determine which photograph has better sharpness, exposure, noise, or color reproduction.
+- Compare multiple editing iterations.
+- Examine specific regions instead of comparing entire images.
+- Create visual before-and-after presentations.
+- Perform professional image-quality assessments.
+- Investigate inconsistencies or suspicious visual alterations.
+- Compare screenshots, designs, documents, scans, illustrations, and other visual material.
+- Create their own comparison workflows without waiting for us to implement every conceivable feature.
+
+The application must be useful to ordinary people who don't understand image-processing terminology, while giving photographers, designers, developers, studio professionals, researchers, and technical investigators the controls they need.
+
+**The central design principle: Start simple. Reveal depth progressively. Never put a ceiling on what an advanced user can accomplish.**
+
+Do not build features merely because competing applications have them. Understand why someone needs them, what problem they solve, how they should work, and whether we can do them better.
+
+Think independently. Challenge assumptions. Investigate alternative designs and algorithms. Discover capabilities that aren't obvious from the requirements below.
+
+This document establishes our direction, not the boundaries of your thinking.
+
+---
+
+# 1. RESEARCH AND COMPETITIVE ANALYSIS — DO NOT SKIP
+
+Before implementation, conduct extensive research.
+
+Do not immediately start writing code.
+
+Investigate existing products, open-source implementations, image-processing libraries, research papers, Android documentation, and professional visual-comparison tools.
+
+## 1.1 Analyze the existing reference application
+
+Our initial reference:
+
+Photo Compare:
+https://play.google.com/store/apps/details?id=ch.want.imagecompare
+
+Open-source repository:
+https://github.com/sniederb/photocompare
+
+Study the repository directly.
+
+Understand:
+
+- Existing application architecture.
+- Image selection and browsing.
+- Pair selection.
+- Image loading and rendering.
+- Synchronized zoom and pan.
+- Selection persistence.
+- EXIF presentation.
+- Sorting.
+- Sharing.
+- Deletion.
+- Android storage permissions.
+- Existing implementation limitations.
+- Opportunities for architectural improvement.
+
+Do not blindly copy its implementation. Understand the original design decisions and retain only the approaches that genuinely make sense.
+
+Its basic workflow is valuable:
+
+1. Select a collection of photographs.
+2. Choose an initial image or pair.
+3. Compare images.
+4. Keep or reject photographs.
+5. Share the selected photographs or remove rejected ones.
+
+Preserve the simplicity of this workflow while substantially expanding its capabilities.
+
+## 1.2 Investigate competing applications
+
+Research Android, iOS, desktop, web, and professional comparison applications.
+
+Investigate:
+
+- VES Image Compare.
+- Image Comparator and similar Android tools.
+- Photo comparison and duplicate detection applications.
+- Adobe Lightroom.
+- Adobe Photoshop.
+- Capture One.
+- Affinity Photo.
+- Darktable.
+- digiKam.
+- ImageMagick.
+- GIMP.
+- Beyond Compare.
+- Kaleidoscope.
+- Diffchecker.
+- Professional image-forensics tools.
+- Screenshot comparison and visual regression tools.
+
+Investigate both open-source and commercial implementations.
+
+Look for:
+
+- Comparison modes.
+- Navigation patterns.
+- Image alignment.
+- Rendering quality.
+- Metadata inspection.
+- Histograms.
+- Color analysis.
+- Image-quality metrics.
+- Batch operations.
+- Professional workflows.
+- Export formats.
+- Customization.
+- Accessibility.
+- Performance.
+- Privacy.
+- Pricing and limitations.
+
+For open-source projects, inspect the actual source code, architecture, algorithms, licensing, and implementation quality whenever possible.
+
+Never assume a feature exists just because a marketing page mentions it.
+
+## 1.3 Investigate the underlying science
+
+Develop a solid understanding of:
+
+- Digital image representation.
+- Raster images and pixel formats.
+- RGB, RGBA, grayscale, CMYK where relevant.
+- sRGB, Display P3, Adobe RGB, and ICC profiles.
+- Linear versus gamma-encoded values.
+- Bit depth.
+- HDR and SDR.
+- Ultra HDR and gain maps.
+- RAW and DNG.
+- JPEG, PNG, WebP, AVIF, HEIF, TIFF, GIF, BMP.
+- Image orientation and EXIF.
+- Image resampling and interpolation.
+- Image registration.
+- Feature detection and matching.
+- Perspective transformations.
+- Color differences.
+- Image noise.
+- Sharpness and blur.
+- Compression artifacts.
+- Structural similarity.
+- Frequency-domain analysis.
+- Histograms.
+- Edge detection.
+- Image segmentation.
+- Optical flow.
+- Perceptual image similarity.
+
+Investigate OpenCV, Android Bitmap APIs, Android Graphics, GPU rendering, and other suitable technologies.
+
+Understand the mathematical limitations of every proposed metric.
+
+For example:
+
+A pixel difference is not necessarily a meaningful visual difference.
+
+Two photographs of the same object can produce substantial pixel differences because of lighting, exposure, camera processing, slight movement, or alignment.
+
+Similarly, a high similarity score does not prove that two images are identical.
+
+Every analytical result must explain what it measures and what it does not measure.
+
+## 1.4 Research deliverables
+
+Create:
+
+- `docs/research/competitive-analysis.md`
+- `docs/research/image-processing-fundamentals.md`
+- `docs/research/computer-vision-algorithms.md`
+- `docs/research/android-platform-research.md`
+- `docs/research/ux-research.md`
+- `docs/research/performance-research.md`
+- `docs/research/licensing-and-dependencies.md`
+- `docs/research/product-opportunity.md`
+
+Include sources, dates, implementation references, limitations, and confidence levels.
+
+Separate verified facts from hypotheses and recommendations.
+
+Do not fabricate research findings.
+
+---
+
+# 2. PRODUCT IDENTITY AND USP
+
+We need a product that has a clear reason to exist.
+
+The application should not be marketed as simply:
+
+"Compare two images side by side."
+
+That functionality already exists.
+
+Our positioning should be closer to:
+
+**A complete visual comparison studio that helps you discover what changed, understand why it changed, and decide what matters.**
+
+Potential product differentiators:
+
+### 2.1 Intelligent scene matching
+
+Find photographs that represent the same scene, object, subject, or moment even when:
+
+- They have different filenames.
+- They are stored in different folders.
+- They were captured by different cameras.
+- They have different resolutions.
+- They have different aspect ratios.
+- They were edited differently.
+- They were compressed.
+- They have different orientations.
+- Their timestamps are inaccurate.
+- Their visual appearance has changed.
+
+### 2.2 Intelligent comparison
+
+Automatically suggest:
+
+- Appropriate comparison modes.
+- Alignment.
+- Zoom synchronization.
+- Matching regions.
+- Differences worth inspecting.
+- Image-quality measurements.
+- Potentially better photographs.
+
+Always let users override automatic decisions.
+
+### 2.3 Unlimited comparison workflows
+
+Let users create their own:
+
+- Layouts.
+- Comparison configurations.
+- Analysis profiles.
+- Keyboard and touch shortcuts.
+- Custom metric combinations.
+- Export presets.
+- Workspace arrangements.
+- Processing pipelines.
+
+### 2.4 Open architecture
+
+Treat the application as an extensible platform rather than a closed collection of screens.
+
+Users should eventually be able to extend the application through documented configuration, custom profiles, importable definitions, and a carefully designed extension architecture.
+
+AI agents should be able to understand the project, its configuration, its APIs, and its internal concepts.
+
+---
+
+# 3. CORE USER EXPERIENCE
+
+The most important question is:
+
+**What does someone want to accomplish immediately after opening the application?**
+
+Design the application around user intent, not around the number of available features.
+
+A typical user should be able to:
+
+1. Open the application.
+2. Select photographs.
+3. Start comparing immediately.
+4. Switch between comparison modes.
+5. Zoom into important areas.
+6. Keep or reject images.
+7. Export or share the results.
+
+Advanced capabilities should be progressively discoverable.
+
+## 3.1 Home screen
+
+Design a modern, clean, visually distinctive home screen.
+
+Potential sections:
+
+- Start a comparison.
+- Recent comparison sessions.
+- Continue previous session.
+- Browse photographs.
+- Compare selected images.
+- Smart scene groups.
+- Favorites and collections.
+- Saved comparison presets.
+- Quick actions.
+- Recently imported images.
+- Comparison history.
+
+Do not turn the home screen into an analytics dashboard.
+
+Prioritize the primary action.
+
+## 3.2 Image selection
+
+Support:
+
+- Android Photo Picker.
+- System document picker.
+- Folder browsing where supported.
+- Multiple image selection.
+- Selection from different folders.
+- Recent images.
+- Date-based browsing.
+- Camera-based grouping.
+- Filename sorting.
+- EXIF-based sorting.
+- File-size sorting.
+- Resolution sorting.
+- Manual ordering.
+- Drag-and-drop reordering.
+- Search.
+- Filters.
+- Favorites.
+- Smart grouping.
+- Importing from supported external storage.
+
+Use Android's modern storage APIs and avoid requesting broad storage permissions unnecessarily.
+
+Users must understand which images are selected and where they originate.
+
+## 3.3 Intelligent image grouping
+
+Develop an optional intelligent grouping system.
+
+Potential signals:
+
+- Capture timestamp.
+- Filename patterns.
+- Directory location.
+- Camera model.
+- Focal length.
+- Exposure settings.
+- Image dimensions.
+- Perceptual hashes.
+- Visual embeddings.
+- Local feature descriptors.
+- Scene similarity.
+- Color distribution.
+- Subject similarity.
+
+Create candidate groups rather than silently combining unrelated images.
+
+Display why images were grouped.
+
+Allow users to:
+
+- Merge groups.
+- Split groups.
+- Remove images.
+- Add images.
+- Reorder groups.
+- Save groups.
+- Compare groups later.
+
+The system must work without cloud services.
+
+Local-first processing should be the default.
+
+---
+
+# 4. COMPARISON ENGINE — THE HEART OF THE APPLICATION
+
+This is the most important component.
+
+Design comparison modes as independent, composable rendering strategies.
+
+Do not hardcode each comparison mode into a giant conditional UI implementation.
+
+## 4.1 Traditional comparison modes
+
+Implement:
+
+### A. Side-by-side
+
+- Two images horizontally.
+- Independent or synchronized zoom.
+- Independent or synchronized pan.
+- Independent or synchronized rotation.
+- Fit-to-screen.
+- Fill-screen.
+- Original-size view.
+- Pixel-level inspection.
+- Swap images.
+- Change image positions.
+- Adjustable divider.
+- Independent image controls.
+
+### B. Vertical comparison
+
+Place images above and below each other.
+
+Useful for portrait devices and vertical photographs.
+
+### C. Swipe reveal
+
+Display one image with a movable divider revealing the second image.
+
+Support:
+
+- Horizontal divider.
+- Vertical divider.
+- Adjustable divider position.
+- Draggable handle.
+- Full-screen mode.
+- Optional labels.
+- Optional percentage indicator.
+
+### D. Overlay
+
+Stack images over one another.
+
+Support:
+
+- Opacity control.
+- Transparency.
+- Blend modes.
+- Difference blend.
+- Screen.
+- Multiply.
+- Overlay.
+- Difference.
+- Other mathematically meaningful blend operations.
+
+Explain blend-mode behavior where useful.
+
+### E. Onion skin
+
+Overlay images with adjustable opacity.
+
+Allow rapid visibility changes to inspect subtle differences.
+
+### F. Difference map
+
+Generate a visual representation of differences.
+
+Support:
+
+- Absolute pixel difference.
+- Threshold-based difference.
+- Relative difference.
+- Heatmap.
+- Highlighted changed areas.
+- Grayscale difference.
+- Edge difference.
+- Color difference.
+
+Provide adjustable sensitivity.
+
+### G. Flicker comparison
+
+Alternate between images at a configurable interval.
+
+Useful for detecting:
+
+- Movement.
+- Alignment errors.
+- Changes in objects.
+- Retouching inconsistencies.
+- Composition differences.
+
+Allow users to configure frequency and transition behavior.
+
+### H. Stacked comparison
+
+Place images in layers.
+
+Support:
+
+- Layer ordering.
+- Visibility toggles.
+- Opacity.
+- Blend modes.
+- Locking.
+- Layer selection.
+- Layer groups.
+
+### I. Contact sheet
+
+Display multiple images in a grid.
+
+Allow:
+
+- Configurable columns.
+- Image spacing.
+- Thumbnail sizes.
+- Sorting.
+- Filtering.
+- Quick selection.
+- Multi-image inspection.
+
+### J. Multi-image comparison
+
+Do not limit the application to two images.
+
+Explore:
+
+- Three-image comparison.
+- Four-image comparison.
+- Configurable grids.
+- Multiple synchronized viewers.
+- Reference-image comparison.
+- Group comparison.
+- Image matrices.
+- Comparison timelines.
+
+The user should be able to select the number of images and choose the layout.
+
+Avoid loading every full-resolution image into memory simultaneously.
+
+---
+
+# 5. ADVANCED IMAGE ALIGNMENT AND GEOMETRY
+
+Two photographs of the same scene are rarely perfectly identical.
+
+Different cameras, lenses, shooting positions, focal lengths, and editing operations introduce geometric differences.
+
+Develop a dedicated alignment engine.
+
+## 5.1 Manual transformations
+
+For each image support:
+
+- Rotation.
+- Horizontal flip.
+- Vertical flip.
+- Translation.
+- Scaling.
+- Aspect-ratio adjustment.
+- Crop.
+- Perspective transformation.
+- Fine-grained positioning.
+
+Support touch gestures and precise numerical controls.
+
+## 5.2 Synchronized transformations
+
+Allow users to independently configure synchronization for:
+
+- Zoom.
+- Pan.
+- Rotation.
+- Center position.
+- Crop.
+- Viewport position.
+
+Do not assume that synchronization should always be enabled.
+
+Create a central synchronization controller with clearly defined behavior.
+
+For example, when images have different aspect ratios, synchronized zoom should use a configurable reference:
+
+- Relative zoom.
+- Physical pixel scale.
+- Viewport percentage.
+- Reference-image scale.
+- Matched-region scale.
+
+## 5.3 Automatic alignment
+
+Investigate and implement appropriate computer-vision approaches.
+
+Potential algorithms:
+
+- ORB.
+- SIFT where licensing and dependency constraints permit.
+- AKAZE.
+- Feature matching.
+- Homography estimation.
+- RANSAC.
+- ECC image alignment.
+- Phase correlation.
+- Optical flow.
+- Landmark matching.
+
+Offer:
+
+- Translation alignment.
+- Rotation and scale alignment.
+- Affine alignment.
+- Perspective alignment.
+- Region-based alignment.
+
+Automatically estimate alignment confidence.
+
+Show users:
+
+- Alignment method.
+- Estimated transformation.
+- Confidence.
+- Number of matched features.
+- Inlier ratio.
+- Potential alignment failure.
+
+Never silently apply aggressive transformations.
+
+Preserve the original images.
+
+Users must be able to inspect and undo every alignment operation.
+
+## 5.4 Alignment visualization
+
+Show optional:
+
+- Feature points.
+- Matched feature lines.
+- Transformation grids.
+- Overlapping boundaries.
+- Cropped regions.
+- Alignment error visualization.
+
+Advanced controls should remain hidden until requested.
+
+---
+
+# 6. REGION-BASED COMPARISON
+
+Whole-image comparison is not always meaningful.
+
+Users should be able to compare specific portions of images.
+
+Implement:
+
+- Rectangular selection.
+- Freeform selection.
+- Polygon selection.
+- Brush selection.
+- Circular selection.
+- Subject-based selection where feasible.
+- Automatic matching-region suggestions.
+
+Allow users to:
+
+- Select a region in image A.
+- Find its corresponding region in image B.
+- Compare the selected regions.
+- Synchronize zoom around the selected region.
+- Save regions.
+- Name regions.
+- Compare multiple regions simultaneously.
+
+Explore:
+
+- Region-specific histograms.
+- Sharpness comparison.
+- Noise comparison.
+- Color differences.
+- Structural similarity.
+- Edge comparison.
+- Local difference maps.
+
+This feature is particularly valuable for professional workflows.
+
+---
+
+# 7. VISUAL INTELLIGENCE AND IMAGE ANALYTICS
+
+Build an optional analytical layer that provides meaningful information without overwhelming ordinary users.
+
+Every metric must have a clearly defined meaning.
+
+## 7.1 Image similarity
+
+Investigate:
+
+- Exact pixel equality.
+- Perceptual hashes.
+- Difference ratios.
+- SSIM.
+- Multi-scale SSIM where appropriate.
+- Feature-based similarity.
+- Embedding-based similarity.
+- Region similarity.
+- Histogram similarity.
+
+Do not combine unrelated metrics into one arbitrary percentage.
+
+If displaying a similarity score, explain:
+
+- Which algorithm generated it.
+- Which image representations were compared.
+- Whether alignment was applied.
+- Whether color normalization was applied.
+- Whether the score is comparable across sessions.
+
+Clearly distinguish:
+
+- Pixel similarity.
+- Structural similarity.
+- Perceptual similarity.
+- Semantic similarity.
+
+They are not interchangeable.
+
+## 7.2 Difference analysis
+
+Calculate and display:
+
+- Number of changed pixels.
+- Percentage of changed pixels.
+- Mean absolute error.
+- Root mean squared error.
+- Maximum difference.
+- Difference distribution.
+- Color difference.
+- Region-level differences.
+- Threshold-based changed area.
+
+Support configurable thresholds.
+
+Offer multiple visualizations.
+
+## 7.3 Histograms
+
+Implement histograms for both images.
+
+Support:
+
+- Overall luminance.
+- Red channel.
+- Green channel.
+- Blue channel.
+- RGB overlay.
+- Alpha where relevant.
+- Grayscale.
+- Logarithmic scale.
+- Linear scale.
+- Region-specific histograms.
+
+Display histograms side by side or overlaid.
+
+Allow the user to select a region and update the histogram accordingly.
+
+## 7.4 Exposure analysis
+
+Investigate:
+
+- Underexposure.
+- Overexposure.
+- Highlight clipping.
+- Shadow clipping.
+- Dynamic range.
+- Luminance distribution.
+- Midtone distribution.
+
+Provide visual warnings where justified.
+
+Do not treat every bright or dark image as incorrectly exposed.
+
+## 7.5 Sharpness and focus
+
+Develop meaningful sharpness analysis.
+
+Investigate:
+
+- Laplacian variance.
+- Gradient magnitude.
+- Edge energy.
+- Local contrast.
+- Frequency-domain sharpness.
+- Region-specific focus estimation.
+
+Identify potentially blurred regions.
+
+Compare focus quality in corresponding regions.
+
+Do not claim that one metric universally determines sharpness.
+
+## 7.6 Noise analysis
+
+Investigate:
+
+- Luminance noise.
+- Chrominance noise.
+- Noise distribution.
+- High-frequency artifacts.
+- Denoising artifacts.
+- Local noise estimation.
+
+Provide visualizations and numerical measurements.
+
+## 7.7 Color analysis
+
+Support:
+
+- RGB distributions.
+- HSV.
+- HSL.
+- CIELAB.
+- CIEDE2000 where appropriate.
+- White balance analysis.
+- Color temperature estimation.
+- Saturation.
+- Contrast.
+- Dominant colors.
+- Color palettes.
+- Color distribution comparison.
+
+Allow users to inspect individual colors and compare sampled regions.
+
+Handle different color profiles correctly.
+
+Do not compare raw RGB values across incompatible color spaces and present the result as objective color difference.
+
+## 7.8 Composition analysis
+
+Explore:
+
+- Subject positioning.
+- Horizon alignment.
+- Rule-of-thirds guides.
+- Center-of-interest estimation.
+- Cropping differences.
+- Perspective.
+- Frame balance.
+- Edge distribution.
+
+Make these optional visual aids.
+
+Do not pretend subjective artistic quality can be measured perfectly.
+
+## 7.9 Image quality report
+
+Create an optional comparison report.
+
+Possible categories:
+
+- Sharpness.
+- Exposure.
+- Highlight preservation.
+- Shadow preservation.
+- Noise.
+- Color.
+- Contrast.
+- Resolution.
+- Compression artifacts.
+- Structural similarity.
+- Alignment quality.
+
+Present individual metrics and explain their limitations.
+
+If recommending a photograph, explain the evidence.
+
+Allow the user to choose which metrics matter for their use case.
+
+---
+
+# 8. EXIF, METADATA, AND FILE INFORMATION
+
+Provide a comprehensive metadata inspector.
+
+Display available information such as:
+
+- Filename.
+- File format.
+- File size.
+- Dimensions.
+- Aspect ratio.
+- Orientation.
+- Capture date.
+- Modification date.
+- Camera manufacturer.
+- Camera model.
+- Lens model.
+- Focal length.
+- Equivalent focal length.
+- Aperture.
+- Shutter speed.
+- ISO.
+- Exposure compensation.
+- Flash.
+- White balance.
+- Metering mode.
+- GPS coordinates.
+- Software.
+- Color profile.
+- Bit depth where available.
+- Compression information.
+- Embedded thumbnail information.
+
+Support metadata comparison.
+
+Highlight fields that differ.
+
+Provide:
+
+- Compact metadata.
+- Detailed metadata.
+- Side-by-side metadata.
+- Difference-only metadata.
+- Raw metadata inspection for advanced users.
+
+Be careful with unavailable, invalid, or misleading metadata.
+
+Do not assume that a file's modification time equals its capture time.
+
+GPS and personal metadata must remain private by default.
+
+---
+
+# 9. SMART PHOTO SELECTION AND BURST CULLING
+
+Preserve the best part of the original application: rapidly finding the best photographs.
+
+Develop a dedicated culling workflow.
+
+## 9.1 Pairwise comparison
+
+Let users:
+
+- Compare consecutive photographs.
+- Compare any two selected photographs.
+- Navigate previous and next.
+- Swap images.
+- Mark favorites.
+- Reject photographs.
+- Skip photographs.
+- Mark uncertain photographs.
+- Add notes.
+
+## 9.2 Multi-image selection
+
+Develop a workflow for comparing 5, 10, 30, 100, or more photographs.
+
+Investigate:
+
+- Tournament-style selection.
+- Pairwise ranking.
+- Elo-like ranking.
+- Bradley-Terry models.
+- Best-of-N selection.
+- Group elimination.
+- Confidence-based review.
+- Human-in-the-loop ranking.
+
+Avoid forcing users to compare every possible pair.
+
+For N photographs, an exhaustive pairwise approach requires N(N-1)/2 comparisons.
+
+Design intelligent alternatives that reduce unnecessary work.
+
+Allow users to review the ranking and override it.
+
+## 9.3 Quality assistance
+
+Optional signals:
+
+- Blur detection.
+- Face visibility where permitted.
+- Closed-eye detection where supported.
+- Motion blur.
+- Exposure.
+- Duplicate similarity.
+- Compression.
+- Image resolution.
+
+All automated recommendations must be explainable.
+
+Do not automatically delete images based on an algorithmic judgment.
+
+## 9.4 Selection management
+
+Support:
+
+- Keep.
+- Reject.
+- Favorite.
+- Maybe.
+- Review later.
+- Custom labels.
+- Invert selection.
+- Bulk selection.
+- Selection history.
+- Undo.
+- Restore previous state.
+
+Keep selection state independent from image rendering.
+
+---
+
+# 10. CREATIVE AND PRESENTATION FEATURES
+
+Comparison is not always about finding technical differences.
+
+Sometimes users want to communicate those differences.
+
+Explore:
+
+- Before/after presentation.
+- Interactive reveal.
+- Side-by-side exports.
+- Overlay exports.
+- Difference-map exports.
+- Comparison grids.
+- Annotated comparisons.
+- Slideshow.
+- Animated transitions.
+- Flicker presentations.
+- GIF export.
+- Video export where technically practical.
+- PDF comparison reports.
+- Shareable comparison configurations.
+
+## 10.1 Slideshow
+
+Support:
+
+- Sequential playback.
+- Configurable interval.
+- Pause/resume.
+- Previous/next.
+- Transition effects.
+- Full-screen playback.
+- Flicker playback.
+- Image sequence playback.
+- Comparison playback.
+
+## 10.2 Annotations
+
+Allow:
+
+- Text labels.
+- Arrows.
+- Rectangles.
+- Circles.
+- Freehand drawing.
+- Region highlights.
+- Measurement markers.
+- Notes.
+
+Keep annotations separate from the original image.
+
+Export annotated copies without modifying the source.
+
+---
+
+# 11. BASIC IMAGE EDITING AND NORMALIZATION
+
+Do not attempt to become a full replacement for Lightroom or Photoshop.
+
+However, some basic transformations are extremely useful for fair comparison.
+
+Support optional non-destructive operations:
+
+- Rotation.
+- Crop.
+- Exposure adjustment.
+- Brightness.
+- Contrast.
+- Saturation.
+- Temperature.
+- Tint.
+- Grayscale.
+- Gamma.
+- Levels.
+- Curves where practical.
+- Sharpening.
+- Blur.
+- Basic noise reduction.
+- Color normalization.
+
+The purpose is to help users understand differences without changing original files.
+
+Maintain a transformation history.
+
+Provide:
+
+- Original.
+- Processed preview.
+- Reset.
+- Undo.
+- Redo.
+- Comparison before and after transformation.
+
+Clearly distinguish actual source differences from changes introduced by normalization.
+
+---
+
+# 12. USER-CONFIGURABLE WORKSPACE
+
+This is one of our most important potential differentiators.
+
+Do not assume there is one perfect interface for everyone.
+
+Provide a configurable comparison workspace.
+
+Users should be able to customize:
+
+- Layout.
+- Number of viewers.
+- Viewer arrangement.
+- Comparison mode.
+- Tool visibility.
+- Toolbar placement.
+- Panel visibility.
+- Metadata placement.
+- Histogram placement.
+- Analysis panels.
+- Information density.
+- Image labels.
+- Background color.
+- Divider thickness.
+- Comparison controls.
+- Shortcuts.
+- Gesture behavior.
+
+## 12.1 Presets
+
+Provide useful built-in presets:
+
+- Quick Compare.
+- Photo Culling.
+- Before & After.
+- Photographer.
+- Color Analysis.
+- Image Quality.
+- Pixel Inspection.
+- Forensic Inspection.
+- Studio Review.
+- Multi-Image Selection.
+- Minimal Distraction.
+
+Presets are starting points, not restrictions.
+
+Users must be able to modify and save their own.
+
+## 12.2 Workspace persistence
+
+Save:
+
+- Active layout.
+- Comparison mode.
+- Selected images.
+- Zoom.
+- Pan.
+- Alignment.
+- Visible panels.
+- Analysis settings.
+- User preferences.
+
+Support restoring previous sessions.
+
+Do not persist every temporary interaction unnecessarily.
+
+---
+
+# 13. UI/UX DESIGN — MATERIAL 3, BUT NOT GENERIC MATERIAL 3
+
+The interface must look like a carefully designed, modern, premium Android application.
+
+Do not produce generic AI-generated dashboard aesthetics.
+
+Avoid:
+
+- Excessive rounded cards.
+- Unnecessary gradients.
+- Decorative glassmorphism.
+- Random accent colors.
+- Giant empty headers.
+- Excessive floating buttons.
+- Too many containers.
+- Unnecessary animations.
+- Repetitive cards.
+- Decorative charts with no useful information.
+- Overcrowded toolbars.
+- Inconsistent spacing.
+- Hidden critical actions.
+
+Use Material Design 3 principles intelligently.
+
+Follow Android platform conventions while establishing a distinctive visual identity.
+
+## 13.1 Design language
+
+Investigate:
+
+- Material 3.
+- Material 3 Expressive.
+- Dynamic color.
+- Adaptive navigation.
+- Responsive layouts.
+- Motion principles.
+- Accessibility.
+- Typography.
+- Color contrast.
+- Touch target sizing.
+
+Create a coherent design system.
+
+Centralize:
+
+- Color tokens.
+- Typography.
+- Spacing.
+- Shapes.
+- Elevation.
+- Component dimensions.
+- Motion specifications.
+- Icon sizing.
+- Animation durations.
+
+Avoid hardcoded styling throughout the application.
+
+## 13.2 Theme support
+
+Implement:
+
+- Light theme.
+- Dark theme.
+- Follow system.
+- Optional pure black AMOLED theme.
+- Configurable comparison canvas background.
+
+The comparison canvas deserves particular attention.
+
+Users should be able to choose:
+
+- Black.
+- White.
+- Neutral gray.
+- Checkerboard.
+- Custom color.
+
+The canvas color can influence visual perception, so do not force one background for every workflow.
+
+## 13.3 Distraction-free mode
+
+Implement an immersive comparison mode.
+
+Features:
+
+- Hide system bars when appropriate.
+- Hide application toolbar.
+- Hide metadata.
+- Hide controls.
+- Show controls temporarily on interaction.
+- Tap to reveal controls.
+- Landscape support.
+- Configurable gesture navigation.
+- Optional screen wake lock.
+
+The user should be able to inspect images without interface elements interfering.
+
+## 13.4 Landscape and adaptive layouts
+
+Landscape must be a first-class experience.
+
+Support:
+
+- Phones.
+- Tablets.
+- Foldables.
+- Resizable windows.
+- Large-screen devices.
+
+Use adaptive layouts rather than simply rotating the portrait interface.
+
+For wide displays, consider:
+
+- Two large viewers.
+- Independent inspector panel.
+- Timeline.
+- Analysis sidebar.
+- Collapsible controls.
+
+For smaller screens, prioritize the images and progressively reveal secondary tools.
+
+## 13.5 Accessibility and internationalization
+
+Support:
+
+- RTL.
+- LTR.
+- Proper layout direction.
+- Localized strings.
+- Number formatting.
+- Date formatting.
+- Accessible labels.
+- Screen readers.
+- High contrast.
+- Font scaling.
+- Large touch targets.
+- Reduced motion.
+- Keyboard navigation.
+
+Never hardcode user-facing strings inside composables.
+
+Prepare localization infrastructure from the beginning.
+
+---
+
+# 14. PERFORMANCE — TREAT THIS AS A CORE PRODUCT FEATURE
+
+A photo comparison application can become extremely expensive in memory and GPU usage.
+
+Performance is not something to optimize at the end.
+
+It must influence the architecture from day one.
+
+The application should work well on modest supported Android devices while scaling up on modern hardware.
+
+Do not promise impossible support for devices below the actual Android compatibility baseline.
+
+Establish a realistic minimum supported API level through platform research.
+
+## 14.1 Memory-efficient image loading
+
+Never decode every photograph at full resolution simply because it is visible in a list.
+
+Implement:
+
+- Thumbnail loading.
+- Resolution-aware decoding.
+- Viewport-based decoding.
+- Sampling.
+- Lazy loading.
+- Image caching.
+- Memory budgeting.
+- Disk caching where useful.
+- Cache eviction.
+- Request cancellation.
+- Background decoding.
+- Efficient bitmap reuse where supported.
+
+For large images, use tiled or region-based rendering.
+
+A user should be able to zoom into a very large image without loading the entire original into GPU memory.
+
+## 14.2 GPU rendering
+
+Investigate:
+
+- Android Canvas.
+- Hardware-accelerated rendering.
+- OpenGL ES.
+- Vulkan where justified.
+- Runtime shaders.
+- GPU image transformations.
+
+Choose technologies based on measured performance, maintainability, and Android support.
+
+Do not introduce complex GPU infrastructure simply because it sounds advanced.
+
+## 14.3 Processing pipeline
+
+Separate:
+
+1. File access.
+2. Metadata extraction.
+3. Image decoding.
+4. Color conversion.
+5. Transformations.
+6. Alignment.
+7. Analysis.
+8. Rendering.
+9. Export.
+
+Each stage must have explicit input/output contracts.
+
+Support cancellation.
+
+Do not block the main thread.
+
+## 14.4 Scalability
+
+Test with:
+
+- Two large images.
+- Four large images.
+- Ten images.
+- Hundreds of images in a collection.
+- High-resolution images.
+- Large RAW files where supported.
+- Repeated zooming and panning.
+- Rapid comparison-mode switching.
+- Background/foreground transitions.
+
+Define measurable memory and frame-time budgets.
+
+Use Android profiling tools to validate them.
+
+---
+
+# 15. FILE MANAGEMENT AND SAFETY
+
+Implement safe file operations.
+
+Support:
+
+- Android share intents.
+- Multiple-image sharing.
+- Exporting copies.
+- Saving comparison results.
+- Moving where permitted.
+- Renaming where permitted.
+- Deleting with appropriate authorization.
+- Recycle/undo behavior where feasible.
+- Export location selection.
+
+Deleting images is destructive.
+
+Never make deletion an ambiguous action.
+
+Require a clear confirmation describing:
+
+- Number of files.
+- Which files will be deleted.
+- Whether originals are affected.
+- Whether the operation is reversible.
+
+Use MediaStore and Storage Access Framework appropriately.
+
+Respect scoped storage.
+
+Never silently delete unselected images.
+
+Provide selection previews before bulk deletion.
+
+---
+
+# 16. AI-NATIVE AND FUTURE EXTENSIBILITY
+
+The application should be designed for a world where AI agents and programmable tools are increasingly common.
+
+However, AI must not become a mandatory dependency for basic functionality.
+
+## 16.1 Local-first intelligence
+
+Prefer local algorithms for:
+
+- Duplicate detection.
+- Image grouping.
+- Metadata extraction.
+- Basic quality analysis.
+- Alignment.
+- Similarity.
+- Difference detection.
+
+Cloud AI must be optional and explicitly authorized.
+
+Do not upload private photographs automatically.
+
+## 16.2 Explainable AI assistance
+
+Potential future capabilities:
+
+- "Find the sharpest photograph."
+- "Show photographs that contain the same scene."
+- "Find the differences between these images."
+- "Which image has less noise?"
+- "Compare the colors in this region."
+- "Find images with similar composition."
+- "Show photographs with potentially incorrect exposure."
+- "Explain why these images look different."
+
+AI-generated conclusions must reference measurable evidence.
+
+Never let an AI model silently replace deterministic image-processing results.
+
+## 16.3 Extensible architecture
+
+Design stable interfaces for:
+
+- Comparison modes.
+- Analysis algorithms.
+- Image decoders.
+- Exporters.
+- Metadata providers.
+- Alignment engines.
+- Layout definitions.
+- Workspace presets.
+
+Investigate a safe extension model.
+
+Potential approaches:
+
+- Configuration-driven capabilities.
+- Versioned JSON definitions.
+- Kotlin interfaces.
+- Internal plugin registration.
+- Optional modules.
+- Future scripting support.
+
+Do not execute arbitrary imported code.
+
+Imported configurations must be validated and versioned.
+
+## 16.4 AI-agent documentation
+
+Create documentation that allows future coding agents to understand:
+
+- What each module does.
+- Why it exists.
+- What it depends on.
+- Which abstractions are intentional.
+- Which decisions must not be changed casually.
+- How to add a new comparison mode.
+- How to add a new metric.
+- How image rendering works.
+- How synchronization works.
+- How memory is managed.
+- How to run tests.
+
+The application should be understandable by both humans and future AI development agents.
+
+---
+
+# 17. SOFTWARE ARCHITECTURE AND ENGINEERING PRINCIPLES
+
+Follow professional software engineering practices.
+
+Do not build a giant collection of composables containing application logic.
+
+## 17.1 Native technology requirements
+
+Use:
+
+- Kotlin.
+- Jetpack Compose.
+- Material 3.
+- Coroutines.
+- Flow.
+- AndroidX.
+- ViewModel.
+- Navigation Compose where appropriate.
+- Room where persistent structured storage is needed.
+- DataStore for preferences.
+- MediaStore.
+- Storage Access Framework.
+- Android Photo Picker.
+
+Investigate suitable image-processing libraries and dependencies.
+
+Document why each major dependency is selected.
+
+Avoid unnecessary third-party dependencies.
+
+## 17.2 Architecture
+
+Use a modular, domain-oriented architecture.
+
+Potential modules:
+
+```text
+app/
+core/
+    common/
+    designsystem/
+    database/
+    storage/
+    imaging/
+    metadata/
+    performance/
+    preferences/
+    analytics/
+    navigation/
+
+domain/
+    model/
+    repository/
+    usecase/
+    comparison/
+    alignment/
+    analysis/
+    selection/
+    workspace/
+
+feature/
+    home/
+    library/
+    selection/
+    comparison/
+    inspector/
+    analytics/
+    culling/
+    slideshow/
+    export/
+    settings/
+
+benchmark/
+```
+
+Adapt this structure according to actual complexity.
+
+Do not create modules simply to make the architecture look sophisticated.
+
+## 17.3 SOLID, DRY, KISS, YAGNI
+
+Follow these principles:
+
+- Single responsibility.
+- Open/closed design.
+- Dependency inversion.
+- Separation of concerns.
+- Avoid duplicated business logic.
+- Prefer composition over inheritance.
+- Avoid unnecessary abstractions.
+- Avoid speculative infrastructure.
+- Keep functions focused.
+- Keep state ownership clear.
+
+## 17.4 Single sources of truth
+
+Establish authoritative sources for:
+
+- Theme.
+- Design tokens.
+- App configuration.
+- Feature availability.
+- Comparison state.
+- Workspace configuration.
+- Image metadata.
+- Selection state.
+- User preferences.
+- Localization.
+- Dependency versions.
+
+Avoid duplicate state.
+
+For example, synchronized zoom must not be implemented separately in every comparison-mode composable.
+
+A central comparison-state model should coordinate all relevant viewers.
+
+## 17.5 Dependency injection
+
+Use constructor injection and a suitable dependency injection strategy.
+
+Business logic must not instantiate its own dependencies.
+
+Keep interfaces meaningful.
+
+Avoid abstraction layers that add no actual value.
+
+## 17.6 Versioning and migrations
+
+Implement:
+
+- Database migrations.
+- Configuration versioning.
+- Export format versioning.
+- Workspace schema versioning.
+- Dependency version management.
+- Changelog.
+- Release notes.
+
+Future upgrades must preserve existing user data and saved configurations.
+
+## 17.7 Error handling
+
+Use explicit error models.
+
+Handle:
+
+- Unsupported formats.
+- Corrupted files.
+- Permission errors.
+- Missing files.
+- Storage removal.
+- Out-of-memory situations.
+- Decoder failures.
+- Analysis failures.
+- Export failures.
+- Interrupted operations.
+
+Errors must be recoverable whenever possible.
+
+Never crash merely because one image cannot be decoded.
+
+---
+
+# 18. CONFIGURATION AS A FIRST-CLASS CAPABILITY
+
+The application should be configurable without requiring source-code changes for ordinary customization.
+
+Create structured configuration models.
+
+Examples:
+
+- `AppConfig`
+- `ThemeConfig`
+- `WorkspaceConfig`
+- `ComparisonConfig`
+- `AlignmentConfig`
+- `AnalysisConfig`
+- `RenderingConfig`
+- `ExportConfig`
+- `PerformanceConfig`
+- `AccessibilityConfig`
+
+Use appropriate immutable data models.
+
+Provide configuration validation.
+
+Allow users to:
+
+- Export configurations.
+- Import configurations.
+- Duplicate configurations.
+- Edit configurations.
+- Restore defaults.
+- Share presets.
+- Version presets.
+
+A configuration imported from another user must not be able to execute arbitrary code.
+
+Document all configuration fields.
+
+Avoid scattering default values throughout the source code.
+
+---
+
+# 19. TESTING AND QUALITY ASSURANCE
+
+Testing is mandatory.
+
+Do not consider a feature complete merely because it compiles.
+
+## 19.1 Unit tests
+
+Test:
+
+- Transformation calculations.
+- Zoom synchronization.
+- Pan synchronization.
+- Rotation.
+- Alignment.
+- Similarity algorithms.
+- Difference metrics.
+- Histogram calculations.
+- Color conversions.
+- Metadata extraction.
+- Selection logic.
+- Ranking logic.
+- Configuration serialization.
+- Configuration migrations.
+- Export logic.
+
+## 19.2 Instrumentation tests
+
+Test:
+
+- Image selection.
+- Navigation.
+- Viewer interactions.
+- Gesture handling.
+- Mode switching.
+- Session restoration.
+- Permission handling.
+- Sharing.
+- Export.
+- Destructive operations.
+
+## 19.3 Image-processing test datasets
+
+Create controlled test images.
+
+Include:
+
+- Identical images.
+- Rotated images.
+- Scaled images.
+- Cropped images.
+- Translated images.
+- Different exposures.
+- Different color temperatures.
+- Compression artifacts.
+- Noise.
+- Blur.
+- Perspective changes.
+- Color-profile differences.
+- Transparent images.
+- Different aspect ratios.
+
+Verify that algorithms behave as expected.
+
+## 19.4 Performance tests
+
+Measure:
+
+- Cold startup.
+- Image loading.
+- Time to first render.
+- Zoom responsiveness.
+- Pan responsiveness.
+- Mode switching.
+- Memory consumption.
+- GPU utilization.
+- CPU utilization.
+- Battery impact.
+- Large-image processing.
+
+Set measurable performance budgets.
+
+## 19.5 Manual testing
+
+The agent MUST manually test the application.
+
+Use Android emulators and physical devices where available.
+
+Test:
+
+- Portrait.
+- Landscape.
+- Light.
+- Dark.
+- AMOLED.
+- Small screens.
+- Large screens.
+- RTL.
+- Large font sizes.
+- Slow devices.
+- Large photographs.
+- Interrupted operations.
+- Backgrounding.
+- Returning to previous sessions.
+
+Inspect screenshots.
+
+Evaluate actual visual quality.
+
+Do not assume a UI is good merely because its implementation follows Material 3.
+
+---
+
+# 20. PRODUCT DISCOVERY BEYOND THE REQUIREMENTS
+
+The preceding sections are extensive, but they are not an exhaustive feature boundary.
+
+You are expected to think beyond them.
+
+Investigate adjacent industries and borrow useful concepts.
+
+Examples:
+
+- Video editing timelines.
+- Scientific visualization.
+- Medical image viewers.
+- Satellite imagery comparison.
+- CAD revision comparison.
+- Code diff interfaces.
+- Visual regression testing.
+- Digital asset management.
+- Professional photography workflows.
+- Forensic image inspection.
+- Color grading.
+- GIS.
+- Research annotation tools.
+
+Ask:
+
+- What can we borrow from video editors?
+- What can we borrow from scientific image viewers?
+- What can we borrow from version-control diff tools?
+- What can we borrow from professional photography?
+- What can we borrow from image-forensics software?
+- What can we simplify from desktop applications for mobile?
+- What can we make possible through a configurable workspace?
+- What becomes possible when comparison is no longer restricted to two images?
+- What workflows could users create that we haven't imagined?
+
+Find meaningful innovations rather than adding features merely for quantity.
+
+---
+
+# 21. IMPLEMENTATION STRATEGY
+
+Do not attempt to implement every advanced capability simultaneously.
+
+Build a coherent, usable application through incremental milestones.
+
+## Phase 0 — Research and product specification
+
+Complete competitive research.
+
+Document:
+
+- Product requirements.
+- User journeys.
+- Feature prioritization.
+- Technical feasibility.
+- Architecture.
+- Dependency decisions.
+- UX principles.
+- Performance targets.
+
+Deliver:
+
+```text
+docs/
+    research/
+    architecture/
+    product/
+    ux/
+    decisions/
+    testing/
+```
+
+## Phase 1 — Foundation and design system
+
+Implement:
+
+- Android project.
+- Kotlin architecture.
+- Compose.
+- Material 3.
+- Navigation.
+- Theme.
+- Design tokens.
+- Preferences.
+- Localization infrastructure.
+- File access.
+- Image decoding foundation.
+
+Deliver a polished, working application shell.
+
+## Phase 2 — Core comparison experience
+
+Implement:
+
+- Image selection.
+- Two-image comparison.
+- Side-by-side.
+- Synchronized zoom.
+- Synchronized pan.
+- Rotation.
+- Swap.
+- Fit-to-screen.
+- Full-screen mode.
+- Selection management.
+- Sharing.
+
+This milestone must already feel substantially better than the reference application.
+
+## Phase 3 — Comparison modes
+
+Implement:
+
+- Swipe reveal.
+- Overlay.
+- Onion skin.
+- Difference map.
+- Flicker.
+- Contact sheet.
+- Multi-image layouts.
+
+Build the rendering architecture so additional modes are easy to add.
+
+## Phase 4 — Alignment and image intelligence
+
+Implement:
+
+- Automatic image matching.
+- Alignment.
+- Transformation controls.
+- Difference analysis.
+- Histograms.
+- Sharpness.
+- Exposure.
+- Noise.
+- Color analysis.
+- Metadata comparison.
+
+## Phase 5 — Advanced workflows
+
+Implement:
+
+- Region selection.
+- Region comparison.
+- Multi-image ranking.
+- Culling.
+- Workspace presets.
+- Saved sessions.
+- Advanced inspector.
+- Professional analysis views.
+
+## Phase 6 — Creative and extensible features
+
+Implement:
+
+- Annotation.
+- Slideshow.
+- Presentation exports.
+- Custom configurations.
+- Import/export of presets.
+- Extension interfaces.
+- Optional AI integration.
+
+## Phase 7 — Optimization and release readiness
+
+Perform:
+
+- Performance profiling.
+- Memory optimization.
+- Accessibility audit.
+- UX refinement.
+- Security review.
+- Regression testing.
+- Manual device testing.
+- Documentation completion.
+
+Do not sacrifice core quality to achieve an impressive feature count.
+
+---
+
+# 22. REQUIRED DOCUMENTATION
+
+Maintain documentation throughout development.
+
+At minimum:
+
+```text
+README.md
+AGENTS.md
+CONTRIBUTING.md
+CHANGELOG.md
+
+docs/
+    architecture/
+        system-overview.md
+        module-boundaries.md
+        image-pipeline.md
+        rendering-engine.md
+        synchronization-engine.md
+        alignment-engine.md
+        analysis-engine.md
+        state-management.md
+        configuration-system.md
+        performance-architecture.md
+
+    product/
+        product-vision.md
+        requirements.md
+        feature-matrix.md
+        user-journeys.md
+
+    ux/
+        design-system.md
+        interaction-guidelines.md
+        accessibility.md
+        responsive-layouts.md
+
+    research/
+        competitive-analysis.md
+        image-processing-fundamentals.md
+        computer-vision-algorithms.md
+        android-platform-research.md
+        licensing-and-dependencies.md
+
+    decisions/
+        ADR-001-*.md
+
+    testing/
+        test-strategy.md
+        image-datasets.md
+        performance-benchmarks.md
+        manual-test-checklist.md
+```
+
+Document important architectural decisions with ADRs.
+
+For every important decision, explain:
+
+1. What was decided?
+2. Why was it decided?
+3. What alternatives were considered?
+4. What are the trade-offs?
+5. What could justify changing the decision later?
+
+This documentation must help future developers and AI agents continue development without having to rediscover the entire architecture.
+
+---
+
+# 23. NON-NEGOTIABLE PRODUCT PRINCIPLES
+
+1. Original photographs must never be modified during comparison.
+2. Comparison operations must be non-destructive by default.
+3. Basic functionality must work offline.
+4. Cloud processing must be optional.
+5. Privacy must be respected.
+6. Destructive operations must be explicit.
+7. Advanced features must not overwhelm beginners.
+8. The comparison canvas must receive the majority of the visual attention.
+9. The application must remain responsive during heavy processing.
+10. Image decoding and analysis must not block the main thread.
+11. Algorithms must communicate their limitations.
+12. User configurations must be portable and versioned.
+13. Architecture must support future extension.
+14. Accessibility and internationalization must not be postponed.
+15. Every important feature must have tests.
+16. Documentation is part of implementation, not an afterthought.
+17. Avoid unnecessary dependencies and overengineering.
+18. Never fake functionality with placeholder controls.
+19. Never display misleading analytical scores.
+20. Do not introduce AI merely to call the application AI-powered.
+
+---
+
+# 24. DEFINITION OF DONE
+
+The application is not complete when the home screen looks attractive.
+
+It is complete when users can reliably accomplish real tasks.
+
+A release candidate must demonstrate:
+
+- Reliable image selection.
+- Accurate orientation handling.
+- Smooth synchronized viewing.
+- Correct transformation mathematics.
+- Multiple useful comparison modes.
+- Reliable image loading.
+- Memory-conscious rendering.
+- Useful image analytics.
+- Safe selection and deletion.
+- Session persistence.
+- Configurable layouts.
+- Responsive portrait and landscape experiences.
+- Dark, light, and system themes.
+- RTL and LTR.
+- Import/export.
+- Automated tests.
+- Manual testing.
+- Performance measurements.
+- Comprehensive documentation.
+
+No fake buttons, incomplete interactions, decorative-only analytics, or unimplemented promises.
+
+Every visible control must have meaningful behavior.
+
+---
+
+# 25. FINAL INSTRUCTIONS TO THE IMPLEMENTING AGENT
+
+Think deeply before implementing.
+
+Do not merely follow this document mechanically.
+
+Your responsibility is to make the best possible product decisions, including decisions that improve upon the original requirements.
+
+Use first-principles thinking.
+
+For every major feature, ask:
+
+- What is the actual user problem?
+- What is the simplest useful solution?
+- What happens when the input is imperfect?
+- What happens at scale?
+- What happens on low-end hardware?
+- What happens when users want complete control?
+- What happens when an algorithm is uncertain?
+- What happens when a future developer needs to extend it?
+- What can we learn from other industries?
+- What are the second- and third-order consequences of this design?
+
+Think about the complete lifecycle:
+
+```text
+Discover images
+      |
+      v
+Understand the collection
+      |
+      v
+Find matching photographs
+      |
+      v
+Choose comparison strategy
+      |
+      v
+Align and normalize
+      |
+      v
+Inspect visually
+      |
+      v
+Analyze measurable differences
+      |
+      v
+Make a decision
+      |
+      v
+Organize, annotate, or rank
+      |
+      v
+Export, share, or continue later
+```
+
+Every stage should be independently useful and composable.
+
+Do not force users through a predetermined workflow.
+
+A photographer might only need a 30-second burst-selection experience.
+
+A designer might need pixel-perfect inspection.
+
+A researcher might need repeatable analytical measurements.
+
+A professional investigator might need transparent transformation histories and reproducible comparison settings.
+
+The same application should accommodate these workflows without becoming four different applications.
+
+**Our biggest USP should be that users are not limited to the comparison experience we imagined. We give them an excellent default experience and the underlying tools to construct their own.**
+
+Build for today's Android ecosystem while making architectural decisions that remain understandable and adaptable in 2030 and beyond.
+
+Do not optimize for impressive-looking source code.
+
+Optimize for:
+
+- Correctness.
+- Clarity.
+- Reliability.
+- Performance.
+- Extensibility.
+- User freedom.
+- Maintainability.
+- Excellent visual experience.
+
+Start with research and architecture, then implement in verified milestones.
+
+Keep the project runnable throughout development.
+
+Run tests after meaningful changes.
+
+Manually inspect the application.
+
+Measure performance rather than guessing.
+
+Update documentation as decisions and implementations evolve.
+
+If a feature is too ambitious for the current milestone, document its feasibility, interfaces, dependencies, and implementation plan instead of creating a fake implementation.
+
+Do not stop at a beautiful prototype.
+
+**Build a real, polished, deeply useful, production-quality native Android application.**
+
+Think beyond the obvious. Question the defaults. Make the difficult things understandable. Make the simple things effortless.
+
+The goal is not to make another image comparator.
+
+**The goal is to build the visual comparison workspace that people wish already existed.**
