@@ -36,12 +36,14 @@ import com.example.prismdiff.core.model.ImageCullingState
 import com.example.prismdiff.core.model.LayerSlotConfig
 import com.example.prismdiff.core.model.LoupeState
 import com.example.prismdiff.core.model.MasterViewportTransform
+import com.example.prismdiff.core.model.MultiSlotLayout
 import com.example.prismdiff.core.model.NormalizationAdjustments
 import com.example.prismdiff.core.model.PixelSample
 import com.example.prismdiff.core.model.RelativeSlotOffset
 import com.example.prismdiff.core.model.ScaleSyncMode
 import com.example.prismdiff.core.model.SortOrder
 import com.example.prismdiff.core.model.SplitOrientation
+import com.example.prismdiff.core.model.StudioDockVisibility
 import com.example.prismdiff.core.model.SyncFlags
 import com.example.prismdiff.core.model.WorkspacePreset
 import com.example.prismdiff.core.shader.PixelMathFormulaEvaluator
@@ -101,9 +103,11 @@ data class PrismDiffUiState(
     val anchorCalibrationSlot: Int? = null,
     val comparisonMode: ComparisonMode = ComparisonMode.SIDE_BY_SIDE,
     val splitOrientation: SplitOrientation = SplitOrientation.AUTO,
+    val multiSlotLayout: MultiSlotLayout = MultiSlotLayout.AUTO,
+    val dockVisibility: StudioDockVisibility = StudioDockVisibility.COMPACT,
     val splitRatio: Float = 0.5f,
     val curtainRatio: Float = 0.5f,
-    val curtainAngleDeg: Float = 90f,
+    val curtainAngleDeg: Float = 0f,
     val onionAlpha: Float = 0.5f,
     val blendOperator: BlendOperator = BlendOperator.NORMAL,
     val layerConfigs: List<LayerSlotConfig> = listOf(LayerSlotConfig(0), LayerSlotConfig(1)),
@@ -413,9 +417,101 @@ class PrismDiffViewModel(
                 list[0] = list[1]
                 list[1] = tmp
             }
-            curr.copy(activeSlotIds = list, alignmentResult = null)
+            val off0 = curr.slotOffsets[0]
+            val off1 = curr.slotOffsets[1]
+            val nextOffsets = curr.slotOffsets.toMutableMap()
+            if (off1 != null) nextOffsets[0] = off1 else nextOffsets.remove(0)
+            if (off0 != null) nextOffsets[1] = off0 else nextOffsets.remove(1)
+            curr.copy(activeSlotIds = list, slotOffsets = nextOffsets, alignmentResult = null)
         }
         refreshPairAnalysisAndExif()
+    }
+
+    fun addSlotAsset(assetId: String? = null) {
+        _state.update { curr ->
+            if (curr.activeSlotIds.size >= 6) {
+                return@update curr.copy(statusMessage = "Maximum 6 comparison slots active")
+            }
+            val candidateId = assetId
+                ?: curr.filteredAssets.firstOrNull { it.id !in curr.activeSlotIds }?.id
+                ?: curr.filteredAssets.firstOrNull()?.id
+                ?: return@update curr
+            curr.copy(
+                activeSlotIds = curr.activeSlotIds + candidateId,
+                statusMessage = "Added Slot ${'A' + curr.activeSlotIds.size}",
+            )
+        }
+    }
+
+    fun removeSlotAt(slotIndex: Int) {
+        _state.update { curr ->
+            if (curr.activeSlotIds.size <= 2 || slotIndex !in curr.activeSlotIds.indices) {
+                return@update curr
+            }
+            val nextIds = curr.activeSlotIds.filterIndexed { i, _ -> i != slotIndex }
+            val remappedOffsets = mutableMapOf<Int, RelativeSlotOffset>()
+            var writeIdx = 0
+            for (readIdx in curr.activeSlotIds.indices) {
+                if (readIdx == slotIndex) continue
+                curr.slotOffsets[readIdx]?.let { remappedOffsets[writeIdx] = it }
+                writeIdx++
+            }
+            curr.copy(
+                activeSlotIds = nextIds,
+                slotOffsets = remappedOffsets,
+                anchorCalibrationSlot = null,
+                alignmentResult = null,
+            )
+        }
+        refreshPairAnalysisAndExif()
+    }
+
+    fun moveSlot(fromIndex: Int, toIndex: Int) {
+        _state.update { curr ->
+            val size = curr.activeSlotIds.size
+            if (fromIndex !in 0 until size || toIndex !in 0 until size || fromIndex == toIndex) {
+                return@update curr
+            }
+            val mutableIds = curr.activeSlotIds.toMutableList()
+            val movedId = mutableIds.removeAt(fromIndex)
+            mutableIds.add(toIndex, movedId)
+
+            val orderedOffsets = (0 until size).map { curr.slotOffsets[it] }.toMutableList()
+            val movedOffset = orderedOffsets.removeAt(fromIndex)
+            orderedOffsets.add(toIndex, movedOffset)
+            val nextOffsets = buildMap {
+                orderedOffsets.forEachIndexed { i, off ->
+                    if (off != null) put(i, off)
+                }
+            }
+            curr.copy(
+                activeSlotIds = mutableIds,
+                slotOffsets = nextOffsets,
+                alignmentResult = null,
+            )
+        }
+        refreshPairAnalysisAndExif()
+    }
+
+    fun setMultiSlotLayout(layout: MultiSlotLayout) {
+        _state.update { it.copy(multiSlotLayout = layout) }
+    }
+
+    fun cycleMultiSlotLayout() {
+        _state.update { curr ->
+            val entries = MultiSlotLayout.entries
+            val next = entries[(entries.indexOf(curr.multiSlotLayout) + 1) % entries.size]
+            curr.copy(multiSlotLayout = next, statusMessage = "Placement: ${next.name.lowercase().replace('_', ' ')}")
+        }
+    }
+
+    fun setDockVisibility(visibility: StudioDockVisibility) {
+        _state.update {
+            it.copy(
+                dockVisibility = visibility,
+                lightsOutImmersive = visibility == StudioDockVisibility.HIDDEN,
+            )
+        }
     }
 
     // --- King-of-the-Hill Culling & Burst Stepping ---
@@ -536,6 +632,30 @@ class PrismDiffViewModel(
         }
     }
 
+    fun handleDoubleTapZoom(containerW: Float, containerH: Float) {
+        val curr = _state.value
+        val ref = curr.slotA ?: return
+        if (curr.masterViewport.zoomFactor > 1.25f) {
+            _state.update {
+                it.copy(
+                    masterViewport = it.masterViewport.copy(
+                        centerU = 0.5f,
+                        centerV = 0.5f,
+                        zoomFactor = 1f,
+                    ),
+                )
+            }
+        } else {
+            val oneToOne = ViewportSynchronizer.zoomForPhysicalOneToOne(ref.width, ref.height, containerW, containerH)
+            val targetZoom = kotlin.math.max(3.0f, oneToOne).coerceAtMost(ViewportSynchronizer.MAX_ZOOM)
+            _state.update {
+                it.copy(
+                    masterViewport = it.masterViewport.copy(zoomFactor = targetZoom),
+                )
+            }
+        }
+    }
+
     fun rotateSlotOrMaster(slotIndex: Int, deltaDeg: Float) {
         _state.update { curr ->
             if (curr.anchorCalibrationSlot == slotIndex || !curr.syncFlags.syncRotation) {
@@ -565,6 +685,15 @@ class PrismDiffViewModel(
         }
     }
 
+    fun resetSlotOffset(slotIndex: Int) {
+        _state.update { curr ->
+            curr.copy(
+                slotOffsets = curr.slotOffsets - slotIndex,
+                anchorCalibrationSlot = if (curr.anchorCalibrationSlot == slotIndex) null else curr.anchorCalibrationSlot,
+            )
+        }
+    }
+
     fun resetViewportAndOffsets() {
         _state.update {
             it.copy(
@@ -572,6 +701,10 @@ class PrismDiffViewModel(
                 slotOffsets = emptyMap(),
                 anchorCalibrationSlot = null,
                 alignmentResult = null,
+                splitRatio = 0.5f,
+                curtainRatio = 0.5f,
+                pixelProbeA = null,
+                pixelProbeB = null,
             )
         }
     }
@@ -662,6 +795,14 @@ class PrismDiffViewModel(
             curr.copy(
                 curtainRatio = (ratio ?: curr.curtainRatio).coerceIn(0.02f, 0.98f),
                 curtainAngleDeg = angleDeg?.let { ViewportSynchronizer.normalizeAngle(it) } ?: curr.curtainAngleDeg,
+            )
+        }
+    }
+
+    fun updateCurtainByDelta(deltaRatio: Float) {
+        _state.update { curr ->
+            curr.copy(
+                curtainRatio = (curr.curtainRatio + deltaRatio).coerceIn(0.02f, 0.98f),
             )
         }
     }
@@ -803,7 +944,17 @@ class PrismDiffViewModel(
     }
 
     fun toggleLightsOut() {
-        _state.update { it.copy(lightsOutImmersive = !it.lightsOutImmersive) }
+        _state.update { curr ->
+            val nextHidden = !curr.lightsOutImmersive
+            curr.copy(
+                lightsOutImmersive = nextHidden,
+                dockVisibility = if (nextHidden) StudioDockVisibility.HIDDEN else StudioDockVisibility.COMPACT,
+            )
+        }
+    }
+
+    fun clearPixelProbe() {
+        _state.update { it.copy(pixelProbeA = null, pixelProbeB = null) }
     }
 
     fun toggleSlideshow(kenBurns: Boolean = false) {

@@ -1,5 +1,6 @@
 package com.example.prismdiff.feature.studio
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,14 +31,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.prismdiff.core.model.ComparisonMode
 import com.example.prismdiff.core.model.ScaleSyncMode
-import com.example.prismdiff.domain.viewport.ViewportSynchronizer
+import com.example.prismdiff.core.model.StudioDockVisibility
 
 /**
- * Adaptive Studio Screen supporting compact phones (floating dock + ModalBottomSheet)
+ * Adaptive Studio Screen supporting compact phones (3-state collapsible/hideable dock + ModalBottomSheet)
  * and wide tablets/foldables/landscape (persistent side Inspector pane).
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,14 +46,21 @@ fun StudioScreen(
     state: PrismDiffUiState,
     viewModel: PrismDiffViewModel,
     derivedBitmap: android.graphics.Bitmap?,
+    bottomNavVisible: Boolean,
     onLaunchPhotoPicker: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showInspectorSheet by remember { mutableStateOf(false) }
     var slotPickerTarget by remember { mutableStateOf<Int?>(null) }
 
+    BackHandler(enabled = state.dockVisibility != StudioDockVisibility.COMPACT) {
+        viewModel.setDockVisibility(StudioDockVisibility.COMPACT)
+    }
+
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val useDockedSidePane = maxWidth >= 840.dp && !state.lightsOutImmersive
+        val useDockedSidePane = maxWidth >= 840.dp &&
+            !state.lightsOutImmersive &&
+            state.dockVisibility != StudioDockVisibility.HIDDEN
 
         Row(modifier = Modifier.fillMaxSize()) {
             Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
@@ -63,15 +70,11 @@ fun StudioScreen(
                     derivedBitmap = derivedBitmap,
                     onPanDelta = viewModel::panByScreenDelta,
                     onZoomFactor = viewModel::zoomByFactor,
-                    onDoubleTapZoom = { w, h ->
-                        if (state.masterViewport.zoomFactor > 1.2f) {
-                            viewModel.resetViewportAndOffsets()
-                        } else {
-                            viewModel.setZoomPhysicalOneToOne(w, h)
-                        }
-                    },
+                    onDoubleTapZoom = viewModel::handleDoubleTapZoom,
                     onTapNormalized = viewModel::samplePixelAt,
-                    onCurtainUpdate = viewModel::updateCurtain,
+                    onCurtainDragDelta = viewModel::updateCurtainByDelta,
+                    onCurtainReset = { viewModel.updateCurtain(ratio = 0.5f) },
+                    onSplitRatioUpdate = viewModel::updateSplitRatio,
                     onHoldPeekA = { hold -> viewModel.updateBlinkStrobe(holdPeekA = hold) },
                     onLoupeMove = { x, y -> viewModel.updateLoupe(normX = x, normY = y) },
                     onCycleSlotAsset = { idx ->
@@ -80,13 +83,19 @@ fun StudioScreen(
                         viewModel.setComparisonMode(ComparisonMode.SIDE_BY_SIDE)
                     },
                     onSetDecision = viewModel::setCullingDecision,
-                    onToggleLightsOut = viewModel::toggleLightsOut,
                     modifier = Modifier.fillMaxSize(),
                 )
 
                 StudioControlDock(
                     state = state,
+                    bottomNavVisible = bottomNavVisible,
+                    onSetDockVisibility = viewModel::setDockVisibility,
                     onSelectMode = viewModel::setComparisonMode,
+                    onSetMultiSlotLayout = viewModel::setMultiSlotLayout,
+                    onCycleMultiSlotLayout = viewModel::cycleMultiSlotLayout,
+                    onAddSlot = { viewModel.addSlotAsset() },
+                    onRemoveSlot = viewModel::removeSlotAt,
+                    onMoveSlot = viewModel::moveSlot,
                     onToggleSyncAll = {
                         val next = !state.syncFlags.anySynced
                         viewModel.toggleSyncFlag(zoom = next, pan = next, rotation = next, crop = next)
@@ -116,9 +125,12 @@ fun StudioScreen(
                     },
                     onOpenInspector = { showInspectorSheet = true },
                     onOpenSlotPicker = { slot -> slotPickerTarget = slot },
-                    onToggleLightsOut = viewModel::toggleLightsOut,
                     onToggleSlideshow = { viewModel.toggleSlideshow(kenBurns = true) },
                     onUpdateOnionAlpha = { alpha -> viewModel.updateOnionAndBlend(alpha = alpha) },
+                    onUpdateCurtainAngle = { deg -> viewModel.updateCurtain(angleDeg = deg) },
+                    onResetCurtain = { viewModel.updateCurtain(ratio = 0.5f) },
+                    onUpdateBlink = { hz, play -> viewModel.updateBlinkStrobe(hz, play) },
+                    onClearProbe = viewModel::clearPixelProbe,
                     onAdvanceTournament = { w, l -> viewModel.startOrAdvanceTournament(w, l) },
                     modifier = Modifier.align(Alignment.BottomCenter),
                 )

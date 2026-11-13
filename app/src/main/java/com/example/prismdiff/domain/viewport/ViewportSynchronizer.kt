@@ -299,3 +299,129 @@ object ViewportSynchronizer {
         return if (mod < 0f) mod + 360f else mod
     }
 }
+
+/**
+ * Exact half-plane curtain wipe geometry using Sutherland-Hodgman polygon clipping.
+ * Works cleanly for any angle 0..360 deg without singularities or snap-back:
+ * - 0 deg: Vertical divider sweeping Left <-> Right
+ * - 90 deg: Horizontal divider sweeping Top <-> Bottom
+ * - 45 / 135 deg: Diagonal wipes
+ */
+object CurtainGeometry {
+
+    data class PointF2D(val x: Float, val y: Float)
+
+    data class CurtainSlice(
+        val polygon: List<PointF2D>,
+        val lineStart: PointF2D,
+        val lineEnd: PointF2D,
+        val handleCenter: PointF2D,
+    )
+
+    fun effectiveRatio(ratio: Float, angleDeg: Float, isRtl: Boolean): Float {
+        val normAngle = ViewportSynchronizer.normalizeAngle(angleDeg)
+        val nx = cos(Math.toRadians(normAngle.toDouble())).toFloat()
+        val clamped = ratio.coerceIn(0.02f, 0.98f)
+        return if (isRtl && kotlin.math.abs(nx) > 0.5f) 1f - clamped else clamped
+    }
+
+    fun dragDeltaToRatio(
+        dx: Float,
+        dy: Float,
+        width: Float,
+        height: Float,
+        angleDeg: Float,
+        isRtl: Boolean,
+    ): Float {
+        val normAngle = ViewportSynchronizer.normalizeAngle(angleDeg)
+        val rad = Math.toRadians(normAngle.toDouble())
+        val nx = cos(rad).toFloat()
+        val ny = sin(rad).toFloat()
+        val span = max(1f, kotlin.math.abs(nx) * width + kotlin.math.abs(ny) * height)
+        val rawDelta = (dx * nx + dy * ny) / span
+        return if (isRtl && kotlin.math.abs(nx) > 0.5f) -rawDelta else rawDelta
+    }
+
+    fun computeSlice(
+        width: Float,
+        height: Float,
+        curtainRatio: Float,
+        angleDeg: Float,
+        isRtl: Boolean = false,
+    ): CurtainSlice {
+        val safeW = max(1f, width)
+        val safeH = max(1f, height)
+        val normAngle = ViewportSynchronizer.normalizeAngle(angleDeg)
+        val rad = Math.toRadians(normAngle.toDouble())
+        val nx = cos(rad).toFloat()
+        val ny = sin(rad).toFloat()
+
+        val corners = listOf(
+            PointF2D(0f, 0f),
+            PointF2D(safeW, 0f),
+            PointF2D(safeW, safeH),
+            PointF2D(0f, safeH),
+        )
+        val projections = corners.map { it.x * nx + it.y * ny }
+        val minProj = projections.minOrNull() ?: 0f
+        val maxProj = projections.maxOrNull() ?: safeW
+        val eff = effectiveRatio(curtainRatio, normAngle, isRtl)
+        val threshold = minProj + eff * (maxProj - minProj)
+
+        // Sutherland-Hodgman clip against p.x * nx + p.y * ny <= threshold
+        val output = mutableListOf<PointF2D>()
+        val crossings = mutableListOf<PointF2D>()
+        val eps = 1e-4f
+
+        for (i in corners.indices) {
+            val a = corners[i]
+            val b = corners[(i + 1) % corners.size]
+            val da = (a.x * nx + a.y * ny) - threshold
+            val db = (b.x * nx + b.y * ny) - threshold
+            val insideA = da <= eps
+            val insideB = db <= eps
+
+            if (insideA) {
+                output.add(a)
+                if (!insideB) {
+                    val t = (da / (da - db)).coerceIn(0f, 1f)
+                    val p = PointF2D(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+                    output.add(p)
+                    crossings.add(p)
+                }
+            } else if (insideB) {
+                val t = (da / (da - db)).coerceIn(0f, 1f)
+                val p = PointF2D(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+                output.add(p)
+                crossings.add(p)
+            }
+        }
+
+        val pStart = crossings.getOrNull(0) ?: PointF2D(safeW * eff, 0f)
+        val pEnd = crossings.getOrNull(1) ?: PointF2D(safeW * eff, safeH)
+        val mid = PointF2D((pStart.x + pEnd.x) * 0.5f, (pStart.y + pEnd.y) * 0.5f)
+        return CurtainSlice(
+            polygon = output,
+            lineStart = pStart,
+            lineEnd = pEnd,
+            handleCenter = mid,
+        )
+    }
+
+    fun distanceToSegment(
+        px: Float,
+        py: Float,
+        ax: Float,
+        ay: Float,
+        bx: Float,
+        by: Float,
+    ): Float {
+        val dx = bx - ax
+        val dy = by - ay
+        val lenSq = dx * dx + dy * dy
+        if (lenSq <= 1e-4f) return kotlin.math.hypot(px - ax, py - ay)
+        val t = (((px - ax) * dx + (py - ay) * dy) / lenSq).coerceIn(0f, 1f)
+        return kotlin.math.hypot(px - (ax + t * dx), py - (ay + t * dy))
+    }
+}
+

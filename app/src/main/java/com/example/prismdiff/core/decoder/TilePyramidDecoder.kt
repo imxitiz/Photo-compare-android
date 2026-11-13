@@ -26,6 +26,14 @@ sealed interface DecodeOutcome<out T> {
     data class Failure(val error: ImageLoadError) : DecodeOutcome<Nothing>
 }
 
+data class DecodedTile(
+    val bitmap: Bitmap,
+    val regionLeftNorm: Float = 0f,
+    val regionTopNorm: Float = 0f,
+    val regionRightNorm: Float = 1f,
+    val regionBottomNorm: Float = 1f,
+)
+
 /**
  * Memory-budgeted Subsampled Tile-Pyramid Decoder powered by [BitmapRegionDecoder].
  *
@@ -90,13 +98,22 @@ class TilePyramidDecoder(private val context: Context) {
         transform: EffectiveSlotTransform,
         targetWidthPx: Int,
         targetHeightPx: Int,
-    ): DecodeOutcome<Bitmap> = withContext(Dispatchers.IO) {
+    ): DecodeOutcome<DecodedTile> = withContext(Dispatchers.IO) {
         val safeTargetW = targetWidthPx.coerceIn(64, 1440)
         val safeTargetH = targetHeightPx.coerceIn(64, 1440)
 
+        fun fullFrameFallback(outcome: DecodeOutcome<Bitmap>): DecodeOutcome<DecodedTile> {
+            return when (outcome) {
+                is DecodeOutcome.Success -> DecodeOutcome.Success(DecodedTile(outcome.data, 0f, 0f, 1f, 1f))
+                is DecodeOutcome.Failure -> outcome
+            }
+        }
+
         // When unzoomed or nearly fit-to-screen, a cached base mipmap is faster & avoids region I/O churn
         if (transform.zoomFactor <= 1.35f) {
-            return@withContext decodeWorkingBuffer(asset, max(safeTargetW, safeTargetH).coerceAtMost(1280))
+            return@withContext fullFrameFallback(
+                decodeWorkingBuffer(asset, max(safeTargetW, safeTargetH).coerceAtMost(1280)),
+            )
         }
 
         val uri = Uri.parse(asset.uriString)
@@ -109,7 +126,7 @@ class TilePyramidDecoder(private val context: Context) {
                     BitmapRegionDecoder.newInstance(stream, false)
                 }
                 if (regionDecoder == null) {
-                    return@withContext decodeWorkingBuffer(asset, 1024)
+                    return@withContext fullFrameFallback(decodeWorkingBuffer(asset, 1024))
                 }
                 try {
                     val rawW = regionDecoder.width
@@ -118,26 +135,27 @@ class TilePyramidDecoder(private val context: Context) {
                         return@withContext DecodeOutcome.Failure(ImageLoadError.CorruptedFile("Empty image dimensions"))
                     }
 
-                    // Convert normalized display center to unrotated source coordinates
-                    val (srcU, srcV) = displayNormToRawNorm(
-                        transform.centerU,
-                        transform.centerV,
-                        asset.orientationDegrees,
-                    )
-                    val spanFrac = (1.15f / transform.zoomFactor.coerceAtLeast(1f)).coerceIn(0.015f, 1f)
-                    val halfW = (rawW * spanFrac * 0.5f).roundToInt().coerceAtLeast(16)
-                    val halfH = (rawH * spanFrac * 0.5f).roundToInt().coerceAtLeast(16)
-                    val cx = (srcU * rawW).roundToInt()
-                    val cy = (srcV * rawH).roundToInt()
+                    val halfSpan = (0.75f / transform.zoomFactor.coerceAtLeast(1f)).coerceIn(0.015f, 0.5f)
+                    val dispLeft = (transform.centerU - halfSpan).coerceIn(0f, 1f)
+                    val dispTop = (transform.centerV - halfSpan).coerceIn(0f, 1f)
+                    val dispRight = (transform.centerU + halfSpan).coerceIn(0f, 1f)
+                    val dispBottom = (transform.centerV + halfSpan).coerceIn(0f, 1f)
+
+                    val (rawU0, rawV0) = displayNormToRawNorm(dispLeft, dispTop, asset.orientationDegrees)
+                    val (rawU1, rawV1) = displayNormToRawNorm(dispRight, dispBottom, asset.orientationDegrees)
+                    val minRawU = min(rawU0, rawU1).coerceIn(0f, 1f)
+                    val maxRawU = max(rawU0, rawU1).coerceIn(0f, 1f)
+                    val minRawV = min(rawV0, rawV1).coerceIn(0f, 1f)
+                    val maxRawV = max(rawV0, rawV1).coerceIn(0f, 1f)
 
                     val rect = Rect(
-                        (cx - halfW).coerceIn(0, rawW - 1),
-                        (cy - halfH).coerceIn(0, rawH - 1),
-                        (cx + halfW).coerceIn(1, rawW),
-                        (cy + halfH).coerceIn(1, rawH),
+                        (minRawU * rawW).toInt().coerceIn(0, rawW - 1),
+                        (minRawV * rawH).toInt().coerceIn(0, rawH - 1),
+                        (maxRawU * rawW).roundToInt().coerceIn(1, rawW),
+                        (maxRawV * rawH).roundToInt().coerceIn(1, rawH),
                     )
-                    if (rect.width() <= 0 || rect.height() <= 0) {
-                        return@withContext decodeWorkingBuffer(asset, 1024)
+                    if (rect.width() < 8 || rect.height() < 8) {
+                        return@withContext fullFrameFallback(decodeWorkingBuffer(asset, 1024))
                     }
 
                     val sampleSize = computeInSampleSize(rect.width(), rect.height(), safeTargetW, safeTargetH)
@@ -146,9 +164,25 @@ class TilePyramidDecoder(private val context: Context) {
                         inPreferredConfig = Bitmap.Config.ARGB_8888
                     }
                     val tile = regionDecoder.decodeRegion(rect, opts)
-                        ?: return@withContext decodeWorkingBuffer(asset, 1024)
+                        ?: return@withContext fullFrameFallback(decodeWorkingBuffer(asset, 1024))
                     val oriented = rotateIfNeeded(tile, asset.orientationDegrees)
-                    DecodeOutcome.Success(oriented)
+
+                    val qRawL = rect.left.toFloat() / rawW
+                    val qRawT = rect.top.toFloat() / rawH
+                    val qRawR = rect.right.toFloat() / rawW
+                    val qRawB = rect.bottom.toFloat() / rawH
+                    val (dU0, dV0) = rawNormToDisplayNorm(qRawL, qRawT, asset.orientationDegrees)
+                    val (dU1, dV1) = rawNormToDisplayNorm(qRawR, qRawB, asset.orientationDegrees)
+
+                    DecodeOutcome.Success(
+                        DecodedTile(
+                            bitmap = oriented,
+                            regionLeftNorm = min(dU0, dU1).coerceIn(0f, 1f),
+                            regionTopNorm = min(dV0, dV1).coerceIn(0f, 1f),
+                            regionRightNorm = max(dU0, dU1).coerceIn(0f, 1f),
+                            regionBottomNorm = max(dV0, dV1).coerceIn(0f, 1f),
+                        ),
+                    )
                 } finally {
                     regionDecoder.recycle()
                 }
@@ -160,7 +194,7 @@ class TilePyramidDecoder(private val context: Context) {
             DecodeOutcome.Failure(ImageLoadError.PermissionDenied("Permission revoked for ${asset.displayName}"))
         } catch (t: Throwable) {
             // Fallback for formats not supported by BitmapRegionDecoder (AVIF/GIF/etc.)
-            decodeWorkingBuffer(asset, 1024)
+            fullFrameFallback(decodeWorkingBuffer(asset, 1024))
         }
     }
 
@@ -227,6 +261,15 @@ class TilePyramidDecoder(private val context: Context) {
             90 -> v to (1f - u)
             180 -> (1f - u) to (1f - v)
             270 -> (1f - v) to u
+            else -> u to v
+        }
+    }
+
+    private fun rawNormToDisplayNorm(u: Float, v: Float, orientationDeg: Int): Pair<Float, Float> {
+        return when (((orientationDeg % 360) + 360) % 360) {
+            90 -> (1f - v) to u
+            180 -> (1f - u) to (1f - v)
+            270 -> v to (1f - u)
             else -> u to v
         }
     }

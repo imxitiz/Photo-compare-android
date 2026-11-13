@@ -85,7 +85,7 @@ fun StudioHomeScreen(
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 18.dp),
         verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {
-        // Editorial Optical Hero Card (distinctive OLED darkroom aesthetic)
+        // Editorial Optical Hero Card (adapts cleanly to both OLED Dark and Studio Light themes)
         item {
             Box(
                 modifier = Modifier
@@ -95,9 +95,9 @@ fun StudioHomeScreen(
                     .background(
                         Brush.linearGradient(
                             colors = listOf(
-                                Color(0xFF0A141D),
-                                Color(0xFF0B0D10),
-                                Color(0xFF1A120A),
+                                MaterialTheme.colorScheme.surfaceContainerLow,
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f),
+                                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.22f),
                             ),
                         ),
                     )
@@ -113,8 +113,16 @@ fun StudioHomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        StudioBadgePill("100% OFFLINE STUDIO", accent = PrismDiffColors.PrismCyan)
-                        StudioBadgePill("ZERO CLOUD • ZERO READ_MEDIA", accent = PrismDiffColors.PrismAmber)
+                        StudioBadgePill(
+                            text = "100% OFFLINE STUDIO",
+                            accent = MaterialTheme.colorScheme.primary,
+                            darkOpticalOverlay = false,
+                        )
+                        StudioBadgePill(
+                            text = "ZERO CLOUD • ZERO READ_MEDIA",
+                            accent = MaterialTheme.colorScheme.secondary,
+                            darkOpticalOverlay = false,
+                        )
                     }
                     Text(
                         text = stringResource(R.string.home_headline),

@@ -6,8 +6,11 @@
 - **Typography**: Locally bundled `Space Grotesk` (display/headers), `Plus Jakarta Sans` (body/UI), and `JetBrains Mono` (tabular technical metrics, EXIF deltas, and pixel hex probes).
 
 ## 2. Progressive Disclosure & Thumb-Zone Ergonomics
-- **Zero-Clutter Stage**: Full-bleed image stage with floating translucent bottom dock (`StudioControlDock`) keeping mode switching, Sync Lock, 1:1 pixel jump, King-of-the-Hill pinning (`Pin Ref A`, `Promote B→A`), and quick Keep/Favorite/Reject controls inside comfortable thumb reach.
-- **Lights-Out Mode**: Single-tap immersive hide of all navigation chrome and HUD overlays with a subtle bottom-right recovery pill.
+- **Edge-to-Edge Stage + 3-State Collapsible/Hideable Dock (`StudioDockVisibility`)**: Full-bleed edge-to-edge canvas with `WindowInsets(0)` on `StudioRoute` and top-row `.statusBarsPadding()` HUD clearance:
+  - **Compact (`COMPACT`, default)**: Single slim bottom pill keeping expand/collapse, active mode, sync lock, one-tap **Reset View**, Inspector, and **Hide** directly reachable without scrolling, plus a contextual quick strip for Curtain Wipe angles (`0°`/`90°`/`45°`/`135°`/`50%`), Onion blend slider, or Blink Hz.
+  - **Expanded (`EXPANDED`)**: Scroll-bounded drawer exposing dynamic 2–6 slot cards (`A`–`F`, reorder `<`/`>`, remove `×`, `+ Slot`), `MultiSlotLayout` placement chips (`Auto`, `Cols`, `Rows`, `Grid`, `2-Up`), all 11 comparison modes, alignment, transform, and King-of-the-Hill culling controls.
+  - **Hidden (`HIDDEN` / Lights-Out)**: Hides both dock and bottom/rail navigation chrome for a pure 100% unobstructed canvas with only a subtle bottom-right `Controls` recovery pill.
+- **Optical Dock Contrast**: The Compare dock automatically applies an optical dark surface palette whenever the canvas backdrop is dark (`OLED_BLACK`, `NEUTRAL_18_GRAY`, `CHECKERBOARD`, `CUSTOM`) so bright-white control cards never glare over dark photography even when the app theme is Light Mode.
 - **4-Tab Pro Inspector**: Deep analytics (*Scopes*, *Forensics*, *EXIF Diff*, *Actions*) live inside a swipeable Material 3 `ModalBottomSheet` on phones and automatically dock as a `360.dp` persistent side pane on `Expanded` screens (`>= 840.dp`).
 
 ## 3. Adaptive Navigation & Accessibility

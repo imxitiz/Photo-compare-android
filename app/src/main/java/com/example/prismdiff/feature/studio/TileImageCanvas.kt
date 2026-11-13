@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -19,6 +20,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -32,6 +34,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.example.prismdiff.core.decoder.DecodeOutcome
+import com.example.prismdiff.core.decoder.DecodedTile
 import com.example.prismdiff.core.decoder.TilePyramidDecoder
 import com.example.prismdiff.core.designsystem.PrismDiffColors
 import com.example.prismdiff.core.designsystem.StudioBadgePill
@@ -52,10 +55,11 @@ import kotlin.math.roundToInt
 /**
  * Hardware-accelerated subsampled tile viewport renderer.
  *
- * - Decodes only visible viewport pyramid slices via [TilePyramidDecoder].
+ * - Strictly clipped to pane bounds so zoomed/rotated slots never paint over adjacent panes.
+ * - Decodes only visible viewport pyramid slices via [TilePyramidDecoder] and renders [DecodedTile]
+ *   at its exact normalized subregion coordinates.
  * - Switches automatically to [FilterQuality.None] nearest-neighbor sampling at >=400% zoom
  *   with crisp pixel-grid hairlines.
- * - Routes all pan/pinch/tap gestures cleanly back to [ViewportSynchronizer] (zero local state loops).
  */
 @Composable
 fun SubsampledTilePane(
@@ -79,9 +83,10 @@ fun SubsampledTilePane(
     onTapNormalized: (u: Float, v: Float) -> Unit,
     onDoubleTapResetOrZoom: (containerW: Float, containerH: Float) -> Unit,
     modifier: Modifier = Modifier,
+    hudApplyStatusBarPadding: Boolean = false,
 ) {
     if (asset == null) {
-        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(modifier = modifier.fillMaxSize().clipToBounds(), contentAlignment = Alignment.Center) {
             Text(
                 text = "Tap to choose image",
                 style = MaterialTheme.typography.bodyMedium,
@@ -91,12 +96,12 @@ fun SubsampledTilePane(
         return
     }
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize().clipToBounds()) {
         val density = LocalDensity.current
         val containerW = with(density) { maxWidth.toPx() }.coerceAtLeast(64f)
         val containerH = with(density) { maxHeight.toPx() }.coerceAtLeast(64f)
 
-        var renderedBitmap by remember(asset.id) { mutableStateOf<Bitmap?>(null) }
+        var renderedTile by remember(asset.id) { mutableStateOf<DecodedTile?>(null) }
         var errorText by remember(asset.id) { mutableStateOf<String?>(null) }
 
         val zoomBucket = (transform.zoomFactor * 2f).roundToInt()
@@ -123,8 +128,9 @@ fun SubsampledTilePane(
             )
             when (outcome) {
                 is DecodeOutcome.Success -> {
+                    val tile = outcome.data
                     val processed = TileComparisonRenderer.renderDiagnosticBitmap(
-                        source = outcome.data,
+                        source = tile.bitmap,
                         overlay = diagnosticOverlay,
                         normalization = normalization,
                         channelIsolation = channelIsolation,
@@ -132,7 +138,7 @@ fun SubsampledTilePane(
                         elaScale = elaScale,
                         bitPlaneIndex = bitPlaneIndex,
                     )
-                    renderedBitmap = processed
+                    renderedTile = tile.copy(bitmap = processed)
                     errorText = null
                 }
                 is DecodeOutcome.Failure -> {
@@ -141,8 +147,8 @@ fun SubsampledTilePane(
             }
         }
 
-        val imgW = asset.width.takeIf { it > 0 } ?: (renderedBitmap?.width ?: 100)
-        val imgH = asset.height.takeIf { it > 0 } ?: (renderedBitmap?.height ?: 100)
+        val imgW = asset.width.takeIf { it > 0 } ?: (renderedTile?.bitmap?.width ?: 100)
+        val imgH = asset.height.takeIf { it > 0 } ?: (renderedTile?.bitmap?.height ?: 100)
         val screenPxPerImgPx = ViewportSynchronizer.screenPixelsPerImagePixel(
             effectiveZoom = transform.zoomFactor,
             imageWidth = imgW,
@@ -181,8 +187,8 @@ fun SubsampledTilePane(
                     )
                 },
         ) {
-            val bmp = renderedBitmap ?: return@Canvas
-            val imageBitmap = bmp.asImageBitmap()
+            val tile = renderedTile ?: return@Canvas
+            val imageBitmap = tile.bitmap.asImageBitmap()
             val fitScale = min(size.width / imgW, size.height / imgH)
             val drawnW = imgW * fitScale * transform.zoomFactor
             val drawnH = imgH * fitScale * transform.zoomFactor
@@ -198,12 +204,16 @@ fun SubsampledTilePane(
             }) {
                 val left = -transform.centerU * drawnW
                 val top = -transform.centerV * drawnH
+                val tileLeft = left + tile.regionLeftNorm * drawnW
+                val tileTop = top + tile.regionTopNorm * drawnH
+                val tileW = ((tile.regionRightNorm - tile.regionLeftNorm) * drawnW).roundToInt().coerceAtLeast(1)
+                val tileH = ((tile.regionBottomNorm - tile.regionTopNorm) * drawnH).roundToInt().coerceAtLeast(1)
                 drawImage(
                     image = imageBitmap,
                     srcOffset = IntOffset.Zero,
                     srcSize = IntSize(imageBitmap.width, imageBitmap.height),
-                    dstOffset = IntOffset(left.roundToInt(), top.roundToInt()),
-                    dstSize = IntSize(drawnW.roundToInt().coerceAtLeast(1), drawnH.roundToInt().coerceAtLeast(1)),
+                    dstOffset = IntOffset(tileLeft.roundToInt(), tileTop.roundToInt()),
+                    dstSize = IntSize(tileW, tileH),
                     filterQuality = if (isNearestNeighbor) FilterQuality.None else FilterQuality.Medium,
                 )
 
@@ -299,7 +309,7 @@ fun SubsampledTilePane(
             }
         }
 
-        if (renderedBitmap == null && errorText == null) {
+        if (renderedTile == null && errorText == null) {
             CircularProgressIndicator(
                 modifier = Modifier.align(Alignment.Center),
                 color = MaterialTheme.colorScheme.primary,
@@ -317,7 +327,8 @@ fun SubsampledTilePane(
                 text = hudLabel,
                 modifier = Modifier
                     .align(Alignment.TopStart)
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                    .then(if (hudApplyStatusBarPadding) Modifier.statusBarsPadding() else Modifier)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
             )
         }
     }

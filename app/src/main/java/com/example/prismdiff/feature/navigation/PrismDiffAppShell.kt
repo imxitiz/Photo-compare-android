@@ -59,6 +59,7 @@ import com.example.prismdiff.core.designsystem.PrismDiffColors
 import com.example.prismdiff.core.designsystem.PrismDiffTheme
 import com.example.prismdiff.core.model.AppLaunchScreen
 import com.example.prismdiff.core.model.ImageAsset
+import com.example.prismdiff.core.model.StudioDockVisibility
 import com.example.prismdiff.feature.browser.CollectionBrowserScreen
 import com.example.prismdiff.feature.home.StudioHomeScreen
 import com.example.prismdiff.feature.settings.SettingsAndShaderLabScreen
@@ -218,13 +219,16 @@ fun PrismDiffAppShell(
         }
 
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val useRail = maxWidth >= 600.dp && !state.lightsOutImmersive
+            val onStudioRoute = currentDest?.hasRoute(StudioRoute::class) == true
+            val hideNavChrome = onStudioRoute && (state.lightsOutImmersive || state.dockVisibility == StudioDockVisibility.HIDDEN)
+            val useRail = maxWidth >= 600.dp && !hideNavChrome
+            val bottomNavVisible = !useRail && !hideNavChrome
 
             Scaffold(
-                contentWindowInsets = WindowInsets.safeDrawing,
+                contentWindowInsets = if (onStudioRoute) WindowInsets(0, 0, 0, 0) else WindowInsets.safeDrawing,
                 snackbarHost = { SnackbarHost(snackbarHostState) },
                 bottomBar = {
-                    if (!useRail && !state.lightsOutImmersive) {
+                    if (bottomNavVisible) {
                         NavigationBar {
                             navItems.forEach { (route, label, icon) ->
                                 val selected = currentDest?.hasRoute(route::class) == true
@@ -324,6 +328,7 @@ fun PrismDiffAppShell(
                                     state = state,
                                     viewModel = viewModel,
                                     derivedBitmap = derivedBitmap,
+                                    bottomNavVisible = bottomNavVisible,
                                     onLaunchPhotoPicker = launchPicker,
                                 )
                             }

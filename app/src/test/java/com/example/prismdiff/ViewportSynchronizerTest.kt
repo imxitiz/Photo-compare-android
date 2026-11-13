@@ -5,6 +5,7 @@ import com.example.prismdiff.core.model.MasterViewportTransform
 import com.example.prismdiff.core.model.RelativeSlotOffset
 import com.example.prismdiff.core.model.ScaleSyncMode
 import com.example.prismdiff.core.model.SyncFlags
+import com.example.prismdiff.domain.viewport.CurtainGeometry
 import com.example.prismdiff.domain.viewport.ViewportSynchronizer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -80,5 +81,30 @@ class ViewportSynchronizerTest {
 
         val pxRatioAt400 = ViewportSynchronizer.screenPixelsPerImagePixel(oneToOneZoom * 4f, 1000, 1000, 500f, 500f)
         assertTrue(pxRatioAt400 >= ViewportSynchronizer.PIXEL_GRID_THRESHOLD_SCALE)
+    }
+
+    @Test
+    fun `curtain geometry produces valid clip polygon and drag delta at 0, 90, and 45 degrees`() {
+        val vertSlice = CurtainGeometry.computeSlice(width = 1000f, height = 2000f, curtainRatio = 0.7f, angleDeg = 0f)
+        assertEquals(700f, vertSlice.lineStart.x, 0.5f)
+        assertEquals(700f, vertSlice.lineEnd.x, 0.5f)
+        assertEquals(700f, vertSlice.handleCenter.x, 0.5f)
+        assertEquals(1000f, vertSlice.handleCenter.y, 0.5f)
+        assertEquals(4, vertSlice.polygon.size)
+
+        val horizSlice = CurtainGeometry.computeSlice(width = 1000f, height = 2000f, curtainRatio = 0.25f, angleDeg = 90f)
+        assertEquals(500f, horizSlice.lineStart.y, 0.5f)
+        assertEquals(500f, horizSlice.lineEnd.y, 0.5f)
+
+        val diagSlice = CurtainGeometry.computeSlice(width = 1000f, height = 1000f, curtainRatio = 0.5f, angleDeg = 45f)
+        assertTrue(diagSlice.polygon.size >= 3)
+        assertEquals(500f, diagSlice.handleCenter.x, 1f)
+        assertEquals(500f, diagSlice.handleCenter.y, 1f)
+
+        val deltaVert = CurtainGeometry.dragDeltaToRatio(dx = 250f, dy = 0f, width = 1000f, height = 2000f, angleDeg = 0f, isRtl = false)
+        assertEquals(0.25f, deltaVert, 0.001f)
+
+        val deltaHoriz = CurtainGeometry.dragDeltaToRatio(dx = 0f, dy = 500f, width = 1000f, height = 2000f, angleDeg = 90f, isRtl = false)
+        assertEquals(0.25f, deltaHoriz, 0.001f)
     }
 }

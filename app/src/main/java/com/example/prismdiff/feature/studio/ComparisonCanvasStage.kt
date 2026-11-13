@@ -6,14 +6,16 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,17 +23,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -41,6 +44,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,12 +54,15 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.FilterQuality
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
+import kotlin.math.hypot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
@@ -70,23 +77,25 @@ import com.example.prismdiff.core.decoder.DecodeOutcome
 import com.example.prismdiff.core.decoder.ExifDiffEngine
 import com.example.prismdiff.core.decoder.TilePyramidDecoder
 import com.example.prismdiff.core.designsystem.PrismDiffColors
-import com.example.prismdiff.core.designsystem.PrismDiffTokens
 import com.example.prismdiff.core.designsystem.StudioBadgePill
 import com.example.prismdiff.core.designsystem.StudioCanvasBackdrop
 import com.example.prismdiff.core.model.BlendOperator
 import com.example.prismdiff.core.model.ComparisonMode
+import com.example.prismdiff.core.model.ComparisonRegion
 import com.example.prismdiff.core.model.CullingDecision
 import com.example.prismdiff.core.model.ImageAsset
+import com.example.prismdiff.core.model.ImageCullingState
+import com.example.prismdiff.core.model.MultiSlotLayout
 import com.example.prismdiff.core.model.RelativeSlotOffset
 import com.example.prismdiff.core.model.SplitOrientation
+import com.example.prismdiff.domain.viewport.CurtainGeometry
 import com.example.prismdiff.domain.viewport.ViewportSynchronizer
-import kotlin.math.cos
+import kotlin.math.min
 import kotlin.math.roundToInt
-import kotlin.math.sin
 
 /**
  * Main composable Comparison Canvas Stage supporting all 11 comparison modes cleanly
- * via independent strategy branches powered by SSOT [ViewportSynchronizer].
+ * via independent strategy branches powered by SSOT [ViewportSynchronizer] and [CurtainGeometry].
  */
 @Composable
 fun ComparisonCanvasStage(
@@ -97,12 +106,13 @@ fun ComparisonCanvasStage(
     onZoomFactor: (slotIndex: Int, zoomRatio: Float) -> Unit,
     onDoubleTapZoom: (w: Float, h: Float) -> Unit,
     onTapNormalized: (u: Float, v: Float) -> Unit,
-    onCurtainUpdate: (ratio: Float?, angleDeg: Float?) -> Unit,
+    onCurtainDragDelta: (deltaRatio: Float) -> Unit,
+    onCurtainReset: () -> Unit,
+    onSplitRatioUpdate: (Float) -> Unit,
     onHoldPeekA: (Boolean) -> Unit,
     onLoupeMove: (normX: Float, normY: Float) -> Unit,
     onCycleSlotAsset: (slotIndex: Int) -> Unit,
     onSetDecision: (assetId: String, decision: CullingDecision) -> Unit,
-    onToggleLightsOut: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val activeAssets = state.activeSlotAssets
@@ -110,7 +120,7 @@ fun ComparisonCanvasStage(
     val assetB = state.slotB
     val showHud = !state.lightsOutImmersive && state.preferences.hudTemplate.isNotBlank()
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize().clipToBounds()) {
         StudioCanvasBackdrop(
             mode = state.preferences.canvasBackdrop,
             customArgb = state.preferences.customBackdropArgb,
@@ -156,29 +166,38 @@ fun ComparisonCanvasStage(
 
         when (state.comparisonMode) {
             ComparisonMode.SIDE_BY_SIDE, ComparisonMode.VERTICAL_SPLIT -> {
-                val useVerticalStack = when {
+                val useVertical2Up = when {
                     state.comparisonMode == ComparisonMode.VERTICAL_SPLIT -> true
                     state.splitOrientation == SplitOrientation.VERTICAL_TOP_BOTTOM -> true
                     state.splitOrientation == SplitOrientation.HORIZONTAL_LEFT_RIGHT -> false
                     else -> !isLandscape
                 }
 
-                if (activeAssets.size >= 3 && state.comparisonMode == ComparisonMode.SIDE_BY_SIDE) {
-                    // 3-Up / 4-Up synchronized quad layout
-                    val gridAssets = activeAssets.take(4)
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                            gridAssets.take(2).forEachIndexed { idx, item ->
+                val multiLayout = when {
+                    activeAssets.size < 3 || state.multiSlotLayout == MultiSlotLayout.FOCUS_PAIR -> null
+                    state.multiSlotLayout == MultiSlotLayout.AUTO -> when {
+                        state.comparisonMode == ComparisonMode.VERTICAL_SPLIT -> MultiSlotLayout.ROWS
+                        activeAssets.size == 3 -> if (isLandscape) MultiSlotLayout.COLUMNS else MultiSlotLayout.ROWS
+                        else -> MultiSlotLayout.GRID
+                    }
+                    else -> state.multiSlotLayout
+                }
+
+                when (multiLayout) {
+                    MultiSlotLayout.COLUMNS -> {
+                        Row(modifier = Modifier.fillMaxSize()) {
+                            activeAssets.forEachIndexed { idx, item ->
+                                val paneW = stageW / activeAssets.size
                                 val t = ViewportSynchronizer.computeEffectiveTransform(
                                     state.masterViewport,
                                     state.slotOffsets[idx] ?: RelativeSlotOffset(),
                                     state.syncFlags,
                                     item,
                                     assetA,
-                                    stageW * 0.5f,
-                                    stageH * 0.5f,
+                                    paneW,
+                                    stageH,
                                 )
-                                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                                Box(modifier = Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
                                     SubsampledTilePane(
                                         asset = item,
                                         decoder = decoder,
@@ -191,39 +210,181 @@ fun ComparisonCanvasStage(
                                         bitPlaneIndex = state.bitPlaneIndex,
                                         showPixelGridAbove400 = state.preferences.showPixelGridAbove400,
                                         showRuleOfThirds = state.showRuleOfThirds,
-                                        alignmentResult = state.alignmentResult,
-                                        showAlignmentOverlay = state.showAlignmentOverlay,
+                                        alignmentResult = if (idx <= 1) state.alignmentResult else null,
+                                        showAlignmentOverlay = state.showAlignmentOverlay && idx <= 1,
                                         annotations = if (idx == 0) state.annotations else emptyList(),
                                         hudLabel = if (showHud) "${('A' + idx)}: ${item.displayName}" else null,
+                                        hudApplyStatusBarPadding = true,
                                         onPanDelta = { dx, dy, w, h -> onPanDelta(idx, dx, dy, w, h) },
                                         onZoomFactor = { z -> onZoomFactor(idx, z) },
                                         onTapNormalized = onTapNormalized,
                                         onDoubleTapResetOrZoom = onDoubleTapZoom,
                                     )
                                 }
-                                if (idx == 0) {
+                                if (idx < activeAssets.lastIndex) {
                                     Box(Modifier.width(1.dp).fillMaxHeight().background(PrismDiffColors.StudioHairline))
                                 }
                             }
                         }
-                        Box(Modifier.height(1.dp).fillMaxWidth().background(PrismDiffColors.StudioHairline))
-                        Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                            gridAssets.drop(2).forEachIndexed { subIdx, item ->
-                                val idx = subIdx + 2
+                    }
+
+                    MultiSlotLayout.ROWS -> {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            activeAssets.forEachIndexed { idx, item ->
+                                val paneH = stageH / activeAssets.size
                                 val t = ViewportSynchronizer.computeEffectiveTransform(
                                     state.masterViewport,
                                     state.slotOffsets[idx] ?: RelativeSlotOffset(),
                                     state.syncFlags,
                                     item,
                                     assetA,
-                                    stageW * 0.5f,
-                                    stageH * 0.5f,
+                                    stageW,
+                                    paneH,
                                 )
-                                Box(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                                Box(modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
                                     SubsampledTilePane(
                                         asset = item,
                                         decoder = decoder,
                                         transform = t,
+                                        diagnosticOverlay = state.diagnosticOverlay,
+                                        normalization = if (idx == 0) state.normalizationA else state.normalizationB,
+                                        channelIsolation = state.channelIsolation,
+                                        elaQuality = state.elaQuality,
+                                        elaScale = state.elaScale,
+                                        bitPlaneIndex = state.bitPlaneIndex,
+                                        showPixelGridAbove400 = state.preferences.showPixelGridAbove400,
+                                        showRuleOfThirds = state.showRuleOfThirds,
+                                        alignmentResult = if (idx <= 1) state.alignmentResult else null,
+                                        showAlignmentOverlay = state.showAlignmentOverlay && idx <= 1,
+                                        annotations = if (idx == 0) state.annotations else emptyList(),
+                                        hudLabel = if (showHud) "${('A' + idx)}: ${item.displayName}" else null,
+                                        hudApplyStatusBarPadding = idx == 0,
+                                        onPanDelta = { dx, dy, w, h -> onPanDelta(idx, dx, dy, w, h) },
+                                        onZoomFactor = { z -> onZoomFactor(idx, z) },
+                                        onTapNormalized = onTapNormalized,
+                                        onDoubleTapResetOrZoom = onDoubleTapZoom,
+                                    )
+                                }
+                                if (idx < activeAssets.lastIndex) {
+                                    Box(Modifier.height(1.dp).fillMaxWidth().background(PrismDiffColors.StudioHairline))
+                                }
+                            }
+                        }
+                    }
+
+                    MultiSlotLayout.GRID -> {
+                        val rows = activeAssets.chunked(2)
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            rows.forEachIndexed { rowIdx, rowItems ->
+                                Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                                    rowItems.forEachIndexed { colIdx, item ->
+                                        val idx = rowIdx * 2 + colIdx
+                                        val t = ViewportSynchronizer.computeEffectiveTransform(
+                                            state.masterViewport,
+                                            state.slotOffsets[idx] ?: RelativeSlotOffset(),
+                                            state.syncFlags,
+                                            item,
+                                            assetA,
+                                            stageW / rowItems.size,
+                                            stageH / rows.size,
+                                        )
+                                        Box(modifier = Modifier.weight(1f).fillMaxHeight().clipToBounds()) {
+                                            SubsampledTilePane(
+                                                asset = item,
+                                                decoder = decoder,
+                                                transform = t,
+                                                diagnosticOverlay = state.diagnosticOverlay,
+                                                normalization = if (idx == 0) state.normalizationA else state.normalizationB,
+                                                channelIsolation = state.channelIsolation,
+                                                elaQuality = state.elaQuality,
+                                                elaScale = state.elaScale,
+                                                bitPlaneIndex = state.bitPlaneIndex,
+                                                showPixelGridAbove400 = state.preferences.showPixelGridAbove400,
+                                                showRuleOfThirds = state.showRuleOfThirds,
+                                                alignmentResult = if (idx <= 1) state.alignmentResult else null,
+                                                showAlignmentOverlay = state.showAlignmentOverlay && idx <= 1,
+                                                annotations = if (idx == 0) state.annotations else emptyList(),
+                                                hudLabel = if (showHud) "${('A' + idx)}: ${item.displayName}" else null,
+                                                hudApplyStatusBarPadding = rowIdx == 0,
+                                                onPanDelta = { dx, dy, w, h -> onPanDelta(idx, dx, dy, w, h) },
+                                                onZoomFactor = { z -> onZoomFactor(idx, z) },
+                                                onTapNormalized = onTapNormalized,
+                                                onDoubleTapResetOrZoom = onDoubleTapZoom,
+                                            )
+                                        }
+                                        if (colIdx < rowItems.lastIndex) {
+                                            Box(Modifier.width(1.dp).fillMaxHeight().background(PrismDiffColors.StudioHairline))
+                                        }
+                                    }
+                                }
+                                if (rowIdx < rows.lastIndex) {
+                                    Box(Modifier.height(1.dp).fillMaxWidth().background(PrismDiffColors.StudioHairline))
+                                }
+                            }
+                        }
+                    }
+
+                    else -> {
+                        // 2-Up Focus Split (with draggable split ratio divider)
+                        val currentSplit by rememberUpdatedState(state.splitRatio)
+                        val currentSplitCallback by rememberUpdatedState(onSplitRatioUpdate)
+
+                        if (useVertical2Up) {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                Box(modifier = Modifier.weight(state.splitRatio).fillMaxWidth().clipToBounds()) {
+                                    SubsampledTilePane(
+                                        asset = assetA,
+                                        decoder = decoder,
+                                        transform = transformA,
+                                        diagnosticOverlay = state.diagnosticOverlay,
+                                        normalization = state.normalizationA,
+                                        channelIsolation = state.channelIsolation,
+                                        elaQuality = state.elaQuality,
+                                        elaScale = state.elaScale,
+                                        bitPlaneIndex = state.bitPlaneIndex,
+                                        showPixelGridAbove400 = state.preferences.showPixelGridAbove400,
+                                        showRuleOfThirds = state.showRuleOfThirds,
+                                        alignmentResult = state.alignmentResult,
+                                        showAlignmentOverlay = state.showAlignmentOverlay,
+                                        annotations = state.annotations,
+                                        hudLabel = hudA,
+                                        hudApplyStatusBarPadding = true,
+                                        onPanDelta = { dx, dy, w, h -> onPanDelta(0, dx, dy, w, h) },
+                                        onZoomFactor = { z -> onZoomFactor(0, z) },
+                                        onTapNormalized = onTapNormalized,
+                                        onDoubleTapResetOrZoom = onDoubleTapZoom,
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(14.dp)
+                                        .background(Color.Transparent)
+                                        .pointerInput(stageH) {
+                                            detectDragGestures { change, dragAmount ->
+                                                change.consume()
+                                                currentSplitCallback(currentSplit + dragAmount.y / stageH)
+                                            }
+                                        }
+                                        .pointerInput(Unit) {
+                                            detectTapGestures(onDoubleTap = { currentSplitCallback(0.5f) })
+                                        }
+                                        .testTag("split_ratio_divider"),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Box(Modifier.fillMaxWidth().height(1.dp).background(PrismDiffColors.StudioHairline))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(width = 40.dp, height = 6.dp)
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(PrismDiffColors.StudioHairline.copy(alpha = 0.9f)),
+                                    )
+                                }
+                                Box(modifier = Modifier.weight(1f - state.splitRatio).fillMaxWidth().clipToBounds()) {
+                                    SubsampledTilePane(
+                                        asset = assetB,
+                                        decoder = decoder,
+                                        transform = transformB,
                                         diagnosticOverlay = state.diagnosticOverlay,
                                         normalization = state.normalizationB,
                                         channelIsolation = state.channelIsolation,
@@ -232,133 +393,203 @@ fun ComparisonCanvasStage(
                                         bitPlaneIndex = state.bitPlaneIndex,
                                         showPixelGridAbove400 = state.preferences.showPixelGridAbove400,
                                         showRuleOfThirds = state.showRuleOfThirds,
-                                        alignmentResult = null,
-                                        showAlignmentOverlay = false,
+                                        alignmentResult = state.alignmentResult,
+                                        showAlignmentOverlay = state.showAlignmentOverlay,
                                         annotations = emptyList(),
-                                        hudLabel = if (showHud) "${('A' + idx)}: ${item.displayName}" else null,
-                                        onPanDelta = { dx, dy, w, h -> onPanDelta(idx, dx, dy, w, h) },
-                                        onZoomFactor = { z -> onZoomFactor(idx, z) },
+                                        hudLabel = hudB,
+                                        hudApplyStatusBarPadding = false,
+                                        onPanDelta = { dx, dy, w, h -> onPanDelta(1, dx, dy, w, h) },
+                                        onZoomFactor = { z -> onZoomFactor(1, z) },
                                         onTapNormalized = onTapNormalized,
                                         onDoubleTapResetOrZoom = onDoubleTapZoom,
                                     )
                                 }
-                                if (subIdx == 0 && gridAssets.size > 3) {
-                                    Box(Modifier.width(1.dp).fillMaxHeight().background(PrismDiffColors.StudioHairline))
+                            }
+                        } else {
+                            Row(modifier = Modifier.fillMaxSize()) {
+                                Box(modifier = Modifier.weight(state.splitRatio).fillMaxHeight().clipToBounds()) {
+                                    SubsampledTilePane(
+                                        asset = assetA,
+                                        decoder = decoder,
+                                        transform = transformA,
+                                        diagnosticOverlay = state.diagnosticOverlay,
+                                        normalization = state.normalizationA,
+                                        channelIsolation = state.channelIsolation,
+                                        elaQuality = state.elaQuality,
+                                        elaScale = state.elaScale,
+                                        bitPlaneIndex = state.bitPlaneIndex,
+                                        showPixelGridAbove400 = state.preferences.showPixelGridAbove400,
+                                        showRuleOfThirds = state.showRuleOfThirds,
+                                        alignmentResult = state.alignmentResult,
+                                        showAlignmentOverlay = state.showAlignmentOverlay,
+                                        annotations = state.annotations,
+                                        hudLabel = hudA,
+                                        hudApplyStatusBarPadding = true,
+                                        onPanDelta = { dx, dy, w, h -> onPanDelta(0, dx, dy, w, h) },
+                                        onZoomFactor = { z -> onZoomFactor(0, z) },
+                                        onTapNormalized = onTapNormalized,
+                                        onDoubleTapResetOrZoom = onDoubleTapZoom,
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .width(14.dp)
+                                        .pointerInput(stageW) {
+                                            detectDragGestures { change, dragAmount ->
+                                                change.consume()
+                                                currentSplitCallback(currentSplit + dragAmount.x / stageW)
+                                            }
+                                        }
+                                        .pointerInput(Unit) {
+                                            detectTapGestures(onDoubleTap = { currentSplitCallback(0.5f) })
+                                        }
+                                        .testTag("split_ratio_divider"),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Box(Modifier.fillMaxHeight().width(1.dp).background(PrismDiffColors.StudioHairline))
+                                    Box(
+                                        modifier = Modifier
+                                            .size(width = 6.dp, height = 40.dp)
+                                            .clip(RoundedCornerShape(3.dp))
+                                            .background(PrismDiffColors.StudioHairline.copy(alpha = 0.9f)),
+                                    )
+                                }
+                                Box(modifier = Modifier.weight(1f - state.splitRatio).fillMaxHeight().clipToBounds()) {
+                                    SubsampledTilePane(
+                                        asset = assetB,
+                                        decoder = decoder,
+                                        transform = transformB,
+                                        diagnosticOverlay = state.diagnosticOverlay,
+                                        normalization = state.normalizationB,
+                                        channelIsolation = state.channelIsolation,
+                                        elaQuality = state.elaQuality,
+                                        elaScale = state.elaScale,
+                                        bitPlaneIndex = state.bitPlaneIndex,
+                                        showPixelGridAbove400 = state.preferences.showPixelGridAbove400,
+                                        showRuleOfThirds = state.showRuleOfThirds,
+                                        alignmentResult = state.alignmentResult,
+                                        showAlignmentOverlay = state.showAlignmentOverlay,
+                                        annotations = emptyList(),
+                                        hudLabel = hudB,
+                                        hudApplyStatusBarPadding = true,
+                                        onPanDelta = { dx, dy, w, h -> onPanDelta(1, dx, dy, w, h) },
+                                        onZoomFactor = { z -> onZoomFactor(1, z) },
+                                        onTapNormalized = onTapNormalized,
+                                        onDoubleTapResetOrZoom = onDoubleTapZoom,
+                                    )
                                 }
                             }
-                        }
-                    }
-                } else if (useVerticalStack) {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        Box(modifier = Modifier.weight(state.splitRatio).fillMaxWidth()) {
-                            SubsampledTilePane(
-                                asset = assetA,
-                                decoder = decoder,
-                                transform = transformA,
-                                diagnosticOverlay = state.diagnosticOverlay,
-                                normalization = state.normalizationA,
-                                channelIsolation = state.channelIsolation,
-                                elaQuality = state.elaQuality,
-                                elaScale = state.elaScale,
-                                bitPlaneIndex = state.bitPlaneIndex,
-                                showPixelGridAbove400 = state.preferences.showPixelGridAbove400,
-                                showRuleOfThirds = state.showRuleOfThirds,
-                                alignmentResult = state.alignmentResult,
-                                showAlignmentOverlay = state.showAlignmentOverlay,
-                                annotations = state.annotations,
-                                hudLabel = hudA,
-                                onPanDelta = { dx, dy, w, h -> onPanDelta(0, dx, dy, w, h) },
-                                onZoomFactor = { z -> onZoomFactor(0, z) },
-                                onTapNormalized = onTapNormalized,
-                                onDoubleTapResetOrZoom = onDoubleTapZoom,
-                            )
-                        }
-                        Box(Modifier.height(1.dp).fillMaxWidth().background(PrismDiffColors.StudioHairline))
-                        Box(modifier = Modifier.weight(1f - state.splitRatio).fillMaxWidth()) {
-                            SubsampledTilePane(
-                                asset = assetB,
-                                decoder = decoder,
-                                transform = transformB,
-                                diagnosticOverlay = state.diagnosticOverlay,
-                                normalization = state.normalizationB,
-                                channelIsolation = state.channelIsolation,
-                                elaQuality = state.elaQuality,
-                                elaScale = state.elaScale,
-                                bitPlaneIndex = state.bitPlaneIndex,
-                                showPixelGridAbove400 = state.preferences.showPixelGridAbove400,
-                                showRuleOfThirds = state.showRuleOfThirds,
-                                alignmentResult = state.alignmentResult,
-                                showAlignmentOverlay = state.showAlignmentOverlay,
-                                annotations = emptyList(),
-                                hudLabel = hudB,
-                                onPanDelta = { dx, dy, w, h -> onPanDelta(1, dx, dy, w, h) },
-                                onZoomFactor = { z -> onZoomFactor(1, z) },
-                                onTapNormalized = onTapNormalized,
-                                onDoubleTapResetOrZoom = onDoubleTapZoom,
-                            )
-                        }
-                    }
-                } else {
-                    Row(modifier = Modifier.fillMaxSize()) {
-                        Box(modifier = Modifier.weight(state.splitRatio).fillMaxHeight()) {
-                            SubsampledTilePane(
-                                asset = assetA,
-                                decoder = decoder,
-                                transform = transformA,
-                                diagnosticOverlay = state.diagnosticOverlay,
-                                normalization = state.normalizationA,
-                                channelIsolation = state.channelIsolation,
-                                elaQuality = state.elaQuality,
-                                elaScale = state.elaScale,
-                                bitPlaneIndex = state.bitPlaneIndex,
-                                showPixelGridAbove400 = state.preferences.showPixelGridAbove400,
-                                showRuleOfThirds = state.showRuleOfThirds,
-                                alignmentResult = state.alignmentResult,
-                                showAlignmentOverlay = state.showAlignmentOverlay,
-                                annotations = state.annotations,
-                                hudLabel = hudA,
-                                onPanDelta = { dx, dy, w, h -> onPanDelta(0, dx, dy, w, h) },
-                                onZoomFactor = { z -> onZoomFactor(0, z) },
-                                onTapNormalized = onTapNormalized,
-                                onDoubleTapResetOrZoom = onDoubleTapZoom,
-                            )
-                        }
-                        Box(Modifier.width(1.dp).fillMaxHeight().background(PrismDiffColors.StudioHairline))
-                        Box(modifier = Modifier.weight(1f - state.splitRatio).fillMaxHeight()) {
-                            SubsampledTilePane(
-                                asset = assetB,
-                                decoder = decoder,
-                                transform = transformB,
-                                diagnosticOverlay = state.diagnosticOverlay,
-                                normalization = state.normalizationB,
-                                channelIsolation = state.channelIsolation,
-                                elaQuality = state.elaQuality,
-                                elaScale = state.elaScale,
-                                bitPlaneIndex = state.bitPlaneIndex,
-                                showPixelGridAbove400 = state.preferences.showPixelGridAbove400,
-                                showRuleOfThirds = state.showRuleOfThirds,
-                                alignmentResult = state.alignmentResult,
-                                showAlignmentOverlay = state.showAlignmentOverlay,
-                                annotations = emptyList(),
-                                hudLabel = hudB,
-                                onPanDelta = { dx, dy, w, h -> onPanDelta(1, dx, dy, w, h) },
-                                onZoomFactor = { z -> onZoomFactor(1, z) },
-                                onTapNormalized = onTapNormalized,
-                                onDoubleTapResetOrZoom = onDoubleTapZoom,
-                            )
                         }
                     }
                 }
             }
 
             ComparisonMode.CURTAIN_WIPE -> {
-                val effectiveSplit = if (isRtl) 1f - state.curtainRatio else state.curtainRatio
-                val angleRad = Math.toRadians(state.curtainAngleDeg.toDouble())
-                val nx = cos(angleRad).toFloat()
-                val ny = sin(angleRad).toFloat()
+                val currentAngle by rememberUpdatedState(state.curtainAngleDeg)
+                val currentDeltaCb by rememberUpdatedState(onCurtainDragDelta)
+                val currentResetCb by rememberUpdatedState(onCurtainReset)
 
-                Box(modifier = Modifier.fillMaxSize()) {
-                    // Base layer: Slot B
+                val slice = remember(stageW, stageH, state.curtainRatio, state.curtainAngleDeg, isRtl) {
+                    CurtainGeometry.computeSlice(stageW, stageH, state.curtainRatio, state.curtainAngleDeg, isRtl)
+                }
+                val currentSlice by rememberUpdatedState(slice)
+
+                val handleW = 60.dp
+                val handleH = 40.dp
+                val halfHandleW = with(density) { (handleW / 2).toPx() }
+                val halfHandleH = with(density) { (handleH / 2).toPx() }
+                val topSafePx = halfHandleH + with(density) { if (showHud) 56.dp.toPx() else 14.dp.toPx() }
+                val bottomSafePx = when (state.dockVisibility) {
+                    com.example.prismdiff.core.model.StudioDockVisibility.HIDDEN ->
+                        (stageH - halfHandleH - with(density) { 24.dp.toPx() }).coerceAtLeast(topSafePx)
+                    com.example.prismdiff.core.model.StudioDockVisibility.COMPACT ->
+                        (stageH - halfHandleH - with(density) { 126.dp.toPx() }).coerceAtLeast(topSafePx)
+                    com.example.prismdiff.core.model.StudioDockVisibility.EXPANDED ->
+                        (stageH * 0.28f).coerceAtLeast(topSafePx)
+                }
+
+                // Keep handle pill riding directly on the cut segment inside the unobstructed vertical corridor
+                val segDy = slice.lineEnd.y - slice.lineStart.y
+                val targetY = slice.handleCenter.y.coerceIn(topSafePx, bottomSafePx)
+                val projectedHandle = if (kotlin.math.abs(segDy) > 1f) {
+                    val t = ((targetY - slice.lineStart.y) / segDy).coerceIn(0.08f, 0.92f)
+                    Offset(
+                        x = slice.lineStart.x + (slice.lineEnd.x - slice.lineStart.x) * t,
+                        y = slice.lineStart.y + segDy * t,
+                    )
+                } else {
+                    Offset(slice.handleCenter.x, slice.handleCenter.y)
+                }
+
+                val clampedCenterX = projectedHandle.x.coerceIn(
+                    halfHandleW + 8f,
+                    (stageW - halfHandleW - 8f).coerceAtLeast(halfHandleW + 8f),
+                )
+                val clampedCenterY = projectedHandle.y.coerceIn(
+                    topSafePx,
+                    (stageH - halfHandleH - 12f).coerceAtLeast(topSafePx),
+                )
+                val currentHandleCenter by rememberUpdatedState(Offset(clampedCenterX, clampedCenterY))
+                val grabRadiusPx = with(density) { 38.dp.toPx() }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clipToBounds()
+                        .pointerInput(stageW, stageH, isRtl) {
+                            awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                                val activeSlice = currentSlice
+                                val distToLine = CurtainGeometry.distanceToSegment(
+                                    px = down.position.x,
+                                    py = down.position.y,
+                                    ax = activeSlice.lineStart.x,
+                                    ay = activeSlice.lineStart.y,
+                                    bx = activeSlice.lineEnd.x,
+                                    by = activeSlice.lineEnd.y,
+                                )
+                                val hc = currentHandleCenter
+                                val distToHandle = hypot(down.position.x - hc.x, down.position.y - hc.y)
+                                if (distToLine <= grabRadiusPx || distToHandle <= grabRadiusPx) {
+                                    val pointerId = down.id
+                                    val startPos = down.position
+                                    var lastPos = down.position
+                                    var dragging = false
+                                    val dragStartSlop = (viewConfiguration.touchSlop * 0.35f).coerceAtLeast(3f)
+                                    while (true) {
+                                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                                        val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                                        if (!change.pressed) {
+                                            if (dragging) change.consume()
+                                            break
+                                        }
+                                        val movedDist = hypot(change.position.x - startPos.x, change.position.y - startPos.y)
+                                        if (!dragging && movedDist >= dragStartSlop) {
+                                            dragging = true
+                                        }
+                                        if (dragging) {
+                                            change.consume()
+                                            val stepDelta = change.position - lastPos
+                                            lastPos = change.position
+                                            if (stepDelta != Offset.Zero) {
+                                                val deltaRatio = CurtainGeometry.dragDeltaToRatio(
+                                                    dx = stepDelta.x,
+                                                    dy = stepDelta.y,
+                                                    width = stageW,
+                                                    height = stageH,
+                                                    angleDeg = currentAngle,
+                                                    isRtl = isRtl,
+                                                )
+                                                currentDeltaCb(deltaRatio)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                ) {
+                    // Base layer: Slot B (right / bottom side)
                     SubsampledTilePane(
                         asset = assetB,
                         decoder = decoder,
@@ -381,51 +612,28 @@ fun ComparisonCanvasStage(
                         onDoubleTapResetOrZoom = onDoubleTapZoom,
                     )
 
-                    // Clipped top layer: Slot A using custom rotatable curtain shape
-                    val curtainShape = remember(effectiveSplit, state.curtainAngleDeg) {
-                        androidx.compose.foundation.shape.GenericShape { size, _ ->
-                            val cx = size.width * effectiveSplit
-                            val cy = size.height * effectiveSplit
-                            val isMostlyVertical = kotlin.math.abs(sin(angleRad)) > 0.707
-                            if (kotlin.math.abs(state.curtainAngleDeg - 90f) < 2f || kotlin.math.abs(state.curtainAngleDeg - 270f) < 2f) {
-                                moveTo(0f, 0f)
-                                lineTo(cx, 0f)
-                                lineTo(cx, size.height)
-                                lineTo(0f, size.height)
-                                close()
-                            } else if (kotlin.math.abs(state.curtainAngleDeg) < 2f || kotlin.math.abs(state.curtainAngleDeg - 180f) < 2f) {
-                                moveTo(0f, 0f)
-                                lineTo(size.width, 0f)
-                                lineTo(size.width, cy)
-                                lineTo(0f, cy)
-                                close()
-                            } else {
-                                // Diagonal half-plane clip passing through (size.width * effectiveSplit, size.height * 0.5f)
-                                val anchorX = size.width * effectiveSplit
-                                val anchorY = size.height * 0.5f
-                                val slope = if (kotlin.math.abs(ny) < 1e-3f) 0f else -nx / ny
-                                if (isMostlyVertical) {
-                                    val topX = anchorX + slope * (-anchorY)
-                                    val botX = anchorX + slope * (size.height - anchorY)
-                                    moveTo(0f, 0f)
-                                    lineTo(topX, 0f)
-                                    lineTo(botX, size.height)
-                                    lineTo(0f, size.height)
-                                    close()
-                                } else {
-                                    val leftY = anchorY - (anchorX) * (if (kotlin.math.abs(nx) < 1e-3f) 0f else ny / nx)
-                                    val rightY = anchorY + (size.width - anchorX) * (if (kotlin.math.abs(nx) < 1e-3f) 0f else ny / nx)
-                                    moveTo(0f, 0f)
-                                    lineTo(size.width, 0f)
-                                    lineTo(size.width, rightY)
-                                    lineTo(0f, leftY)
-                                    close()
+                    // Top clipped layer: Slot A using exact Sutherland-Hodgman polygon clip
+                    val curtainShape = remember(state.curtainRatio, state.curtainAngleDeg, isRtl) {
+                        GenericShape { size, _ ->
+                            val pathSlice = CurtainGeometry.computeSlice(
+                                size.width,
+                                size.height,
+                                state.curtainRatio,
+                                state.curtainAngleDeg,
+                                isRtl,
+                            )
+                            val poly = pathSlice.polygon
+                            if (poly.isNotEmpty()) {
+                                moveTo(poly[0].x, poly[0].y)
+                                for (i in 1 until poly.size) {
+                                    lineTo(poly[i].x, poly[i].y)
                                 }
+                                close()
                             }
                         }
                     }
 
-                    Box(modifier = Modifier.fillMaxSize().clip(curtainShape)) {
+                    Box(modifier = Modifier.fillMaxSize().clip(curtainShape).clipToBounds()) {
                         SubsampledTilePane(
                             asset = assetA,
                             decoder = decoder,
@@ -449,37 +657,61 @@ fun ComparisonCanvasStage(
                         )
                     }
 
-                    // Draggable curtain line & handle
-                    val handleX = with(density) { (stageW * effectiveSplit).toDp() }
-                    val handleY = with(density) { (stageH * 0.5f).toDp() }
+                    // High-contrast two-tone curtain divider line along the actual cut plane
+                    val lineAccent = MaterialTheme.colorScheme.primary
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        val s = Offset(slice.lineStart.x, slice.lineStart.y)
+                        val e = Offset(slice.lineEnd.x, slice.lineEnd.y)
+                        drawLine(Color(0xCC000000), start = s, end = e, strokeWidth = 3.5.dp.toPx())
+                        drawLine(lineAccent, start = s, end = e, strokeWidth = 1.5.dp.toPx())
+                    }
+
+                    // Visual wiper pill centered along the curtain divider (all drags handled cleanly by stationary parent!)
+                    val handleX = with(density) { clampedCenterX.toDp() }
+                    val handleY = with(density) { clampedCenterY.toDp() }
+
                     Box(
                         modifier = Modifier
-                            .offset(x = handleX - 24.dp, y = handleY - 24.dp)
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.92f))
-                            .border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                            .pointerInput(isRtl, stageW, stageH, state.curtainAngleDeg) {
-                                detectDragGestures { change, dragAmount ->
-                                    change.consume()
-                                    val isHorizCut = kotlin.math.abs(state.curtainAngleDeg) < 20f || kotlin.math.abs(state.curtainAngleDeg - 180f) < 20f
-                                    val delta = if (isHorizCut) dragAmount.y / stageH else (if (isRtl) -dragAmount.x else dragAmount.x) / stageW
-                                    onCurtainUpdate(state.curtainRatio + delta, null)
-                                }
+                            .offset(x = handleX - handleW / 2, y = handleY - handleH / 2)
+                            .size(width = handleW, height = handleH)
+                            .clip(RoundedCornerShape(19.dp))
+                            .background(Color(0xEA0E1218))
+                            .border(1.5.dp, PrismDiffColors.PrismCyan, RoundedCornerShape(19.dp))
+                            .pointerInput(Unit) {
+                                detectTapGestures(onDoubleTap = { currentResetCb() })
                             }
                             .testTag("curtain_handle"),
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(
-                            text = "${(state.curtainRatio * 100).roundToInt()}%",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DragHandle,
+                                contentDescription = "Drag curtain wipe",
+                                tint = PrismDiffColors.PrismCyan,
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Text(
+                                text = "${(state.curtainRatio * 100).roundToInt()}%",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFF2F5FA),
+                            )
+                        }
                     }
 
                     if (showHud) {
-                        StudioBadgePill("A: ${assetA?.displayName ?: "—"}", Modifier.align(Alignment.TopStart).padding(10.dp))
-                        StudioBadgePill("B: ${assetB?.displayName ?: "—"}", Modifier.align(Alignment.TopEnd).padding(10.dp), accent = MaterialTheme.colorScheme.secondary)
+                        val slotSuffix = if (activeAssets.size >= 3) " (${activeAssets.size})" else ""
+                        StudioBadgePill(
+                            text = "A: ${assetA?.displayName ?: "—"}",
+                            modifier = Modifier.align(Alignment.TopStart).statusBarsPadding().padding(10.dp),
+                        )
+                        StudioBadgePill(
+                            text = "B$slotSuffix: ${assetB?.displayName ?: "—"}",
+                            modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(10.dp),
+                            accent = PrismDiffColors.PrismAmber,
+                        )
                     }
                 }
             }
@@ -495,7 +727,7 @@ fun ComparisonCanvasStage(
                     BlendOperator.LUMINOSITY -> BlendMode.Luminosity
                     BlendOperator.COLOR -> BlendMode.Color
                 }
-                Box(modifier = Modifier.fillMaxSize()) {
+                Box(modifier = Modifier.fillMaxSize().clipToBounds()) {
                     SubsampledTilePane(
                         asset = assetA,
                         decoder = decoder,
@@ -527,25 +759,35 @@ fun ComparisonCanvasStage(
                     }
                     overlayBmp?.let { bmp ->
                         val imgBmp = bmp.asImageBitmap()
-                        Canvas(modifier = Modifier.fillMaxSize().alpha(state.onionAlpha)) {
-                            val fitScale = kotlin.math.min(size.width / imgBmp.width, size.height / imgBmp.height)
+                        Canvas(modifier = Modifier.fillMaxSize().clipToBounds().alpha(state.onionAlpha)) {
+                            val fitScale = min(size.width / imgBmp.width, size.height / imgBmp.height)
                             val dw = imgBmp.width * fitScale * transformB.zoomFactor
                             val dh = imgBmp.height * fitScale * transformB.zoomFactor
                             val left = size.width * 0.5f - transformB.centerU * dw
                             val top = size.height * 0.5f - transformB.centerV * dh
-                            drawImage(
-                                image = imgBmp,
-                                dstOffset = IntOffset(left.roundToInt(), top.roundToInt()),
-                                dstSize = IntSize(dw.roundToInt().coerceAtLeast(1), dh.roundToInt().coerceAtLeast(1)),
-                                blendMode = blend,
-                            )
+                            withTransform({
+                                translate(size.width * 0.5f, size.height * 0.5f)
+                                rotate(transformB.rotationDeg, Offset.Zero)
+                                scale(
+                                    scaleX = if (transformB.flipHorizontal) -1f else 1f,
+                                    scaleY = if (transformB.flipVertical) -1f else 1f,
+                                    pivot = Offset.Zero,
+                                )
+                            }) {
+                                drawImage(
+                                    image = imgBmp,
+                                    dstOffset = IntOffset((left - size.width * 0.5f).roundToInt(), (top - size.height * 0.5f).roundToInt()),
+                                    dstSize = IntSize(dw.roundToInt().coerceAtLeast(1), dh.roundToInt().coerceAtLeast(1)),
+                                    blendMode = blend,
+                                )
+                            }
                         }
                     }
 
                     if (showHud) {
                         StudioBadgePill(
                             text = "${state.blendOperator.name} • ${(state.onionAlpha * 100).roundToInt()}% B over A",
-                            modifier = Modifier.align(Alignment.TopCenter).padding(10.dp),
+                            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(10.dp),
                         )
                     }
                 }
@@ -558,6 +800,7 @@ fun ComparisonCanvasStage(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .clipToBounds()
                         .pointerInput(Unit) {
                             detectTapGestures(
                                 onPress = {
@@ -585,8 +828,9 @@ fun ComparisonCanvasStage(
                         annotations = state.annotations,
                         hudLabel = if (showHud) {
                             val tag = if (showA) "A (Ref)" else "B (Challenger)"
-                            "$tag • ${activeAsset?.displayName ?: ""} • Hold anywhere to peek A"
+                            "$tag • ${activeAsset?.displayName ?: ""} • Hold to peek A"
                         } else null,
+                        hudApplyStatusBarPadding = true,
                         onPanDelta = { dx, dy, w, h -> onPanDelta(if (showA) 0 else 1, dx, dy, w, h) },
                         onZoomFactor = { z -> onZoomFactor(if (showA) 0 else 1, z) },
                         onTapNormalized = onTapNormalized,
@@ -596,27 +840,54 @@ fun ComparisonCanvasStage(
                         StudioBadgePill(
                             text = stringResource(R.string.photosensitive_warning),
                             accent = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.align(Alignment.TopCenter).padding(top = 44.dp),
+                            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 42.dp),
                         )
                     }
                 }
             }
 
             ComparisonMode.DIFFERENCE_MAP, ComparisonMode.CUSTOM_SHADER -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(modifier = Modifier.fillMaxSize().clipToBounds(), contentAlignment = Alignment.Center) {
                     if (derivedBitmap != null) {
-                        Image(
-                            bitmap = derivedBitmap.asImageBitmap(),
-                            contentDescription = "Computed visual difference map",
-                            contentScale = ContentScale.Fit,
+                        val imgBmp = derivedBitmap.asImageBitmap()
+                        Canvas(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .pointerInput(Unit) {
-                                    detectTapGestures(onTap = { onToggleLightsOut() })
+                                .pointerInput(stageW, stageH) {
+                                    detectTransformGestures { _, pan, zoom, _ ->
+                                        if (pan != Offset.Zero) onPanDelta(0, pan.x, pan.y, stageW, stageH)
+                                        if (zoom != 1f) onZoomFactor(0, zoom)
+                                    }
+                                }
+                                .pointerInput(stageW, stageH) {
+                                    detectTapGestures(
+                                        onDoubleTap = { onDoubleTapZoom(stageW, stageH) },
+                                    )
                                 },
-                        )
+                        ) {
+                            val fitScale = min(size.width / imgBmp.width, size.height / imgBmp.height)
+                            val dw = imgBmp.width * fitScale * transformA.zoomFactor
+                            val dh = imgBmp.height * fitScale * transformA.zoomFactor
+                            val left = -transformA.centerU * dw
+                            val top = -transformA.centerV * dh
+                            withTransform({
+                                translate(size.width * 0.5f, size.height * 0.5f)
+                                rotate(transformA.rotationDeg, Offset.Zero)
+                            }) {
+                                drawImage(
+                                    image = imgBmp,
+                                    dstOffset = IntOffset(left.roundToInt(), top.roundToInt()),
+                                    dstSize = IntSize(dw.roundToInt().coerceAtLeast(1), dh.roundToInt().coerceAtLeast(1)),
+                                    filterQuality = if (transformA.zoomFactor >= 3f) FilterQuality.None else FilterQuality.Medium,
+                                )
+                            }
+                        }
                     } else {
-                        Text("Computing mathematical difference buffer…", style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            "Computing mathematical difference buffer…",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                     val bundle = state.metricsBundle
                     if (showHud && bundle != null) {
@@ -627,7 +898,7 @@ fun ComparisonCanvasStage(
                         }
                         StudioBadgePill(
                             text = badgeText,
-                            modifier = Modifier.align(Alignment.TopCenter).padding(10.dp),
+                            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(10.dp),
                         )
                     }
                 }
@@ -642,7 +913,7 @@ fun ComparisonCanvasStage(
                     loupeNormY = state.loupeState.normY,
                     magnification = state.loupeState.magnification,
                     onLoupeMove = onLoupeMove,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().statusBarsPadding(),
                 )
             }
 
@@ -651,7 +922,7 @@ fun ComparisonCanvasStage(
                     assets = activeAssets.ifEmpty { listOfNotNull(assetA, assetB) },
                     regions = state.regions,
                     decoder = decoder,
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier.fillMaxSize().statusBarsPadding(),
                 )
             }
 
@@ -661,11 +932,8 @@ fun ComparisonCanvasStage(
                     decisions = state.decisions,
                     decoder = decoder,
                     onSetDecision = onSetDecision,
-                    onPickAsset = { idx ->
-                        val chosen = state.filteredAssets.getOrNull(idx) ?: return@ContactSheetStage
-                        onCycleSlotAsset(idx)
-                    },
-                    modifier = Modifier.fillMaxSize(),
+                    onPickAsset = { idx -> onCycleSlotAsset(idx) },
+                    modifier = Modifier.fillMaxSize().statusBarsPadding(),
                 )
             }
         }
@@ -697,7 +965,6 @@ private fun MultiLoupeStage(
     }
 
     Column(modifier = modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        // Overview composition with magnetic crosshair
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -732,7 +999,7 @@ private fun MultiLoupeStage(
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val cx = size.width * loupeNormX
                 val cy = size.height * loupeNormY
-                drawCircle(PrismDiffColors.PrismCyan, radius = 26.dp.toPx(), center = Offset(cx, cy), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+                drawCircle(PrismDiffColors.PrismCyan, radius = 26.dp.toPx(), center = Offset(cx, cy), style = Stroke(2.dp.toPx()))
                 drawLine(PrismDiffColors.PrismCyan, Offset(cx - 34.dp.toPx(), cy), Offset(cx + 34.dp.toPx(), cy), strokeWidth = 1.5.dp.toPx())
                 drawLine(PrismDiffColors.PrismCyan, Offset(cx, cy - 34.dp.toPx()), Offset(cx, cy + 34.dp.toPx()), strokeWidth = 1.5.dp.toPx())
             }
@@ -742,7 +1009,6 @@ private fun MultiLoupeStage(
             )
         }
 
-        // Docked synchronized split magnifier callouts
         Row(
             modifier = Modifier.height(170.dp).fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -795,7 +1061,7 @@ private fun LoupeCalloutCard(
 @Composable
 private fun RoiPatchMatrixStage(
     assets: List<ImageAsset>,
-    regions: List<com.example.prismdiff.core.model.ComparisonRegion>,
+    regions: List<ComparisonRegion>,
     decoder: TilePyramidDecoder,
     modifier: Modifier = Modifier,
 ) {
@@ -825,7 +1091,8 @@ private fun RoiPatchMatrixStage(
                             .fillMaxHeight()
                             .clip(RoundedCornerShape(10.dp))
                             .background(Color.Black)
-                            .border(1.dp, PrismDiffColors.StudioHairline, RoundedCornerShape(10.dp)),
+                            .border(1.dp, PrismDiffColors.StudioHairline, RoundedCornerShape(10.dp))
+                            .clipToBounds(),
                     ) {
                         bmp?.let { b ->
                             val img = b.asImageBitmap()
@@ -855,7 +1122,7 @@ private fun RoiPatchMatrixStage(
 @Composable
 private fun ContactSheetStage(
     assets: List<ImageAsset>,
-    decisions: Map<String, com.example.prismdiff.core.model.ImageCullingState>,
+    decisions: Map<String, ImageCullingState>,
     decoder: TilePyramidDecoder,
     onSetDecision: (String, CullingDecision) -> Unit,
     onPickAsset: (Int) -> Unit,

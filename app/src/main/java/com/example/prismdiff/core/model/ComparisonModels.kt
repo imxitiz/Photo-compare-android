@@ -26,6 +26,22 @@ enum class SplitOrientation {
 }
 
 @Serializable
+enum class MultiSlotLayout {
+    AUTO,
+    COLUMNS,
+    ROWS,
+    GRID,
+    FOCUS_PAIR,
+}
+
+@Serializable
+enum class StudioDockVisibility {
+    COMPACT,
+    EXPANDED,
+    HIDDEN,
+}
+
+@Serializable
 enum class BlendOperator {
     NORMAL,
     DIFFERENCE,

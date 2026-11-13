@@ -123,20 +123,31 @@ fun StudioBadgePill(
     text: String,
     modifier: Modifier = Modifier,
     accent: Color = MaterialTheme.colorScheme.primary,
+    darkOpticalOverlay: Boolean = true,
 ) {
+    val bg = if (darkOpticalOverlay) {
+        Color(0xD90B0E14)
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.92f)
+    }
+    val fg = if (darkOpticalOverlay) {
+        Color(0xFFF2F5FA)
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
     Surface(
         modifier = modifier,
-        color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.88f),
+        color = bg,
         shape = RoundedCornerShape(PrismDiffTokens.StudioRadiusSmall),
         border = androidx.compose.foundation.BorderStroke(
             PrismDiffTokens.HairlineDivider,
-            accent.copy(alpha = 0.45f),
+            accent.copy(alpha = 0.55f),
         ),
     ) {
         Text(
             text = text,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = fg,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),

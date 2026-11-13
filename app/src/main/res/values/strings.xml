@@ -75,4 +75,15 @@
     <string name="cd_keep_photo">Mark photo as Keep</string>
     <string name="cd_favorite_photo">Mark photo as Favorite</string>
     <string name="cd_reject_photo">Mark photo as Reject</string>
+    <string name="cd_dock_expand">Expand studio controls</string>
+    <string name="cd_dock_collapse">Collapse studio controls</string>
+    <string name="cd_dock_hide">Hide studio controls for full canvas</string>
+    <string name="cd_dock_show">Show studio controls</string>
+    <string name="action_reset_view">Reset View</string>
+    <string name="action_add_slot">+ Slot</string>
+    <string name="layout_auto">Auto</string>
+    <string name="layout_columns">Columns</string>
+    <string name="layout_rows">Rows</string>
+    <string name="layout_grid">Grid</string>
+    <string name="layout_focus_pair">2-Up Focus</string>
 </resources>

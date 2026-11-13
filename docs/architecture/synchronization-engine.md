@@ -30,3 +30,11 @@ $$T_i = \begin{cases}
 
 ## Pixel-Peeping Threshold
 When effective screen-pixels-per-image-pixel $\ge 4.0$ ($400\%$ zoom), the renderer switches automatically from bilinear filtering to **`FilterQuality.None` (Nearest-Neighbor)** and enables optional subpixel grid hairlines and the `(x, y) -> RGB / HEX / HSL / Lab` probe.
+
+## Curtain Wipe Geometry & Stationary Drag (`CurtainGeometry`)
+- **Any-Angle Slicing**: `CurtainGeometry.computeSlice` intersects the viewport rectangle with the half-plane $(x - x_0)\cos\theta + (y - y_0)\sin\theta \le 0$ via Sutherland-Hodgman polygon clipping, cleanly supporting vertical (`0°`), horizontal (`90°`), and diagonal (`45°`/`135°`) wipes plus automatic RTL mirroring.
+- **Stationary Pointer Interceptor**: The parent stage captures `PointerEventPass.Initial` drag deltas once movement exceeds `0.35 * touchSlop` near the cut segment or handle pill, feeding projected `dragDeltaToRatio` updates into `StateFlow` without moving underlying image viewports or causing handle oscillation.
+
+## Multi-Slot Isolation & Layout Placement (`MultiSlotLayout`)
+Every comparison pane enforces strict `.clipToBounds()` isolation so zoomed or rotated images never bleed into neighboring slots. Up to 6 simultaneous slots can be reordered, removed, or arranged via `AUTO`, `COLUMNS`, `ROWS`, `GRID`, or `FOCUS_PAIR`, while 2-up splits include a draggable `splitRatio` divider.
+
