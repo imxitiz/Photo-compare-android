@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "PrismDiff",
+  "description": "Offline native Android photo comparison, burst culling, and forensic visual analysis studio.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

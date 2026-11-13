@@ -1,3 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">My Application</string>
+    <string name="app_name">PrismDiff</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">Studio</string>
+    <string name="nav_browser">Library</string>
+    <string name="nav_compare">Compare</string>
+    <string name="nav_settings">Config</string>
+
+    <!-- Launch & Home -->
+    <string name="home_headline">Visual Comparison Studio</string>
+    <string name="home_subheadline">Zero-bloat, 100% offline pixel inspection, burst culling, and forensic analysis.</string>
+    <string name="action_pick_photos">Pick Photos</string>
+    <string name="action_open_folder">Open Folder</string>
+    <string name="action_direct_canvas">Open Canvas</string>
+    <string name="section_continue_session">Continue Previous Session</string>
+    <string name="section_smart_clusters">Smart Scene &amp; Burst Groups</string>
+    <string name="section_workspace_presets">Workspace Presets</string>
+    <string name="section_calibration_lab">Calibration Lab Samples</string>
+
+    <!-- Browser & Ingestion -->
+    <string name="browser_title">Collection &amp; Bursts</string>
+    <string name="search_photos_hint">Filter by filename, camera, or tag…</string>
+    <string name="sort_label">Sort</string>
+    <string name="action_compare_selected">Compare (%1$d)</string>
+    <string name="action_tournament_cull">Elo Burst Rank</string>
+    <string name="action_invert_selection">Invert</string>
+    <string name="action_trash_unselected">Trash Unselected</string>
+    <string name="action_delete_selected">Delete</string>
+
+    <!-- Studio & Modes -->
+    <string name="mode_side_by_side">Split</string>
+    <string name="mode_vertical_split">Vertical</string>
+    <string name="mode_curtain_wipe">Wipe</string>
+    <string name="mode_onion_skin">Onion</string>
+    <string name="mode_layer_stack">Layers</string>
+    <string name="mode_blink_strobe">Blink</string>
+    <string name="mode_difference_map">Diff Map</string>
+    <string name="mode_multi_loupe">Loupe</string>
+    <string name="mode_roi_matrix">ROI Grid</string>
+    <string name="mode_contact_sheet">Contact</string>
+    <string name="mode_custom_shader">Shader Lab</string>
+
+    <!-- Controls & Safety -->
+    <string name="sync_locked">Sync Locked</string>
+    <string name="sync_unlocked">Sync Free</string>
+    <string name="calibrate_anchor">Anchor Offset</string>
+    <string name="auto_align">Auto-Align</string>
+    <string name="pin_reference">Pin Ref A</string>
+    <string name="promote_challenger">Promote B→A</string>
+    <string name="lights_out_enter">Lights Out</string>
+    <string name="photosensitive_warning">Strobe rates above 3 Hz may trigger photosensitive reactions.</string>
+    <string name="delete_confirm_title">Confirm File Removal</string>
+    <string name="delete_confirm_reversible">Move %1$d image(s) (%2$s) to system Trash? Originals can be restored for 30 days.</string>
+    <string name="delete_confirm_permanent">Permanently delete %1$d image(s) (%2$s)? This cannot be undone.</string>
+    <string name="action_confirm_trash">Move to Trash</string>
+    <string name="action_confirm_delete">Delete Permanently</string>
+    <string name="action_cancel">Cancel</string>
+
+    <!-- Settings & Extensibility -->
+    <string name="settings_title">Studio Configuration</string>
+    <string name="settings_launch_screen">Startup Screen</string>
+    <string name="settings_theme">Theme &amp; OLED Mode</string>
+    <string name="settings_backdrop">Canvas Backdrop</string>
+    <string name="settings_shader_lab">Custom Pixel-Math Shader Lab</string>
+    <string name="settings_presets_json">JSON Workspace Presets</string>
+    <string name="settings_privacy_ergonomics">Privacy &amp; Ergonomics</string>
+
+    <!-- Accessibility -->
+    <string name="cd_swap_slots">Swap slot A and slot B</string>
+    <string name="cd_reset_viewport">Reset zoom and center</string>
+    <string name="cd_toggle_sync">Toggle synchronized zoom and pan</string>
+    <string name="cd_inspector">Open analysis and metadata inspector</string>
+    <string name="cd_keep_photo">Mark photo as Keep</string>
+    <string name="cd_favorite_photo">Mark photo as Favorite</string>
+    <string name="cd_reject_photo">Mark photo as Reject</string>
 </resources>
